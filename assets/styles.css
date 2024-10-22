@@ -1,0 +1,79 @@
+/* Color pallete: https://coolors.co/d6ffb7-f5ff90-ffc15e-ff9f1c-080357 */
+
+body {
+    align-items: center;
+    background-color: #111111;
+    color: #EEEEEE;
+    display: flex;
+    flex-direction: column;
+    gap: 1em;
+}
+
+#query {
+    display: flex;
+    width: 100%;
+    gap: 1em;
+}
+
+textarea {
+    background-color: #222222;
+    border-color: #767676;
+    color: #EEEEEE;
+    font-size: 1.5em;
+    width: 100%;
+}
+
+textarea:focus {
+    border-color: #D6FFB7;
+    outline: none;
+}
+
+button {
+    background-color: #FF9F1C;
+    border-color: #FFC15E;
+    color: black;
+    font-size: 1.5em;
+}
+
+button:focus {
+    border-color: #D6FFB7;
+    outline: none;
+}
+
+svg {
+    background-color: #222222;
+    border: 1px solid #767676;
+}
+
+p {
+    background-color: #222222;
+    border: 1px solid #767676;
+    padding: 0.5em;
+    border-radius: 0.1em;
+    margin: 0;
+}
+
+.found {
+    color: #FF9F1C;
+    font-weight: bold;
+}
+
+#times {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+}
+
+input[type=datetime-local] {
+    background-color: #222222;
+    border: 1px solid #767676;
+    color: #EEEEEE;
+    color-scheme: dark;
+    display: inline;
+    height: 100%;
+}
+
+input:focus {
+    border-color: #D6FFB7;
+    outline: none;
+}
