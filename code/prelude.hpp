@@ -3,7 +3,19 @@
 typedef int                I32;
 typedef long long          I64;
 typedef unsigned char      U8;
+typedef unsigned int       U32;
 typedef unsigned long long U64;
+typedef float              F32;
+
+template <typename A>
+static A min(A a, A b) {
+  return a < b ? a : b;
+}
+
+template <typename A>
+static A max(A a, A b) {
+  return a < b ? a : b;
+}
 
 struct String {
   U8* data;
@@ -23,19 +35,66 @@ struct String {
     this->data = data;
     this->size = size;
   }
+
+  U8& operator[](I64 index) {
+    return data[index];
+  }
 };
+
+static bool operator==(String a, String b) {
+  return a.size == b.size && memcmp(a.data, b.data, a.size) == 0;
+}
 
 static bool starts_with(String base, String prefix) {
   return prefix.size <= base.size && memcmp(base.data, prefix.data, prefix.size) == 0;
 }
 
 static String to_string(I64 n, U8 storage[20]) {
-  U8* end   = &storage[20];
-  U8* start = end;
+  U8*  end      = &storage[20];
+  U8*  start    = end;
+  bool negative = false;
+  if (n < 0) {
+    negative = true;
+    n        = -n;
+  }
   do {
     start  = start - 1;
     *start = n % 10 + '0';
     n      = n / 10;
   } while (n > 0);
+  if (negative) {
+    start  = start - 1;
+    *start = '-';
+  }
   return String(start, end - start);
+}
+
+static String suffix(String base, I64 start) {
+  start      = min(start, base.size);
+  base.data += start;
+  base.size -= start;
+  return base;
+}
+
+static String prefix(String base, I64 end) {
+  base.size = min(end, base.size);
+  return base;
+}
+
+static String slice(String base, I64 start, I64 end) {
+  return prefix(suffix(base, start), end - start);
+}
+
+static I64 find(String base, char c) {
+  U8* result = (U8*) memchr(base.data, c, base.size);
+  return result == NULL ? base.size : (result - base.data);
+}
+
+static bool contains(String base, String target) {
+  for (I64 i = 0; i < base.size; i++) {
+    if (starts_with(suffix(base, i), target)) {
+      return true;
+    }
+  }
+  return false;
 }

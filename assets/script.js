@@ -1,29 +1,6 @@
-const logs = `
-2024/10/21 19:46:41 INFO Listening port=8080
-2024/10/21 19:46:49 INFO New signUp request requestId=6961230c-bc7c-4636-a88f-f1f42a9a631d
-2024/10/21 19:46:49 ERROR Password mismatch requestId=6961230c-bc7c-4636-a88f-f1f42a9a631d error="crypto/bcrypt: hashedPassword is not the hash of the given password"
-2024/10/21 19:46:50 INFO New signUp request requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc
-2024/10/21 19:46:50 ERROR Failed to insert user with unique username requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc error="ERROR: duplicate key value violates unique constraint \"users_username_key\" (SQLSTATE 23505)"
-2024/10/21 19:46:52 INFO New signUp request requestId=50c9655a-1a50-4480-84df-02d098531620
-2024/10/21 19:46:52 ERROR Password mismatch requestId=50c9655a-1a50-4480-84df-02d098531620 error="crypto/bcrypt: hashedPassword is not the hash of the given password"
-2024/10/21 19:46:53 INFO New signUp request requestId=f457dd4c-207b-4db3-8c52-afbfd97e636f
-2024/10/21 19:46:53 ERROR Failed to insert user with unique username requestId=f457dd4c-207b-4db3-8c52-afbfd97e636f error="ERROR: duplicate key value violates unique constraint \"users_username_key\" (SQLSTATE 23505)"
-2024/10/21 19:46:54 INFO New signUp request requestId=a6977bb0-feb9-46f5-b301-3ad8041a7b5d
-2024/10/21 19:46:54 ERROR Password mismatch requestId=a6977bb0-feb9-46f5-b301-3ad8041a7b5d error="crypto/bcrypt: hashedPassword is not the hash of the given password"
-2024/10/21 19:46:59 INFO New signUp request requestId=f01dcfee-1d3e-4fba-b9f1-ace395a7791b
-2024/10/21 19:47:18 INFO New signUp request requestId=a825a67c-8e7d-428d-bbd0-570c69ea6343
-2024/10/21 19:47:18 ERROR Failed to find user requestId=a825a67c-8e7d-428d-bbd0-570c69ea6343
-2024/10/21 19:47:19 INFO New signUp request requestId=702d3c59-6166-451f-abd6-d93e02bd72e6
-2024/10/21 19:47:19 ERROR Failed to find user requestId=702d3c59-6166-451f-abd6-d93e02bd72e6
-2024/10/21 19:47:20 INFO New signUp request requestId=0cd5b6c2-3f6d-4dcc-a163-4e19b817a73a
-2024/10/21 19:47:20 ERROR Failed to find user requestId=0cd5b6c2-3f6d-4dcc-a163-4e19b817a73a
-`;
-
-function load() {
-    const socket = new WebSocket("/websocket");
-    
-    const search = document.getElementById("queryButton");
-    search.addEventListener("click", onSearchClick);
+function load() {    
+    const queryButton = document.getElementById("queryButton");
+    queryButton.addEventListener("click", onQueryClick);
 
     const yesterday = new Date();
     yesterday.setTime(yesterday.getTime() - 6 * 60 * 60 * 1000)
@@ -40,46 +17,34 @@ function setDate(input, date) {
     input.value = date.toISOString().slice(0, 16);
 }
 
-function onSearchClick() {
-    document.body.replaceChildren(document.body.children[0]);
-
-    const startTime = document.getElementById("startTime");
-    const start     = new Date(startTime.value).getTime();
-
-    const endTime = document.getElementById("endTime");
-    const end     = new Date(endTime.value).getTime();
-
+async function onQueryClick() {
     const queryInput = document.getElementById("queryInput");
     const query      = queryInput.value;
-    const buckets    = new Array(100).fill(0);
 
-    const lines = logs.split("\n");
-    for (const line of lines) {
-	if (line.includes(query) && line.length > 0) {
-	    const [day, time]               = line.split(" ").slice(0, 2);
-	    const [hours, minutes, seconds] = time.split(":");
-	    const date                      = new Date(day);
-	    date.setHours(hours, minutes, seconds)
-	    const timestamp = date.getTime();
-	    if (start <= timestamp && timestamp <= end) {
-		const index = Math.floor((timestamp - start) / (end - start) * buckets.length);
-		buckets[index]++;
-	    }
-	}
-    }
+    const startTime = document.getElementById("startTime").value;
+    const endTime   = document.getElementById("endTime").value;    
     
-    drawGraph(buckets);
+    const response  = await fetch(`/api/query?query=${query}&start=${startTime}&end=${endTime}`);
+    const body      = await response.arrayBuffer();
+    const binsView  = new Uint8Array(body, 0, 4);
+    
+    const bins      = binsView[0] + (binsView[1] << 8) + (binsView[2] << 16) + (binsView[3] << 24);
+    const histogram = new Int32Array(body, 4, bins);
+    const logs      = new TextDecoder().decode(new Uint8Array(body, (bins + 1) * 4));
+    
+    document.body.replaceChildren(document.body.children[0]);
+    drawGraph(histogram);
 
     const results = document.createElement("div");
     results.setAttribute("id", "results");
-    for (const line of lines) {
-	if (line.includes(query) && line.length > 0) {
+    for (const line of logs.split("\n")) {
+	if (line.length > 0) {
 	    const result     = document.createElement("p");
 	    result.innerHTML = line.replaceAll(query, `<span class=\"found\">${query}</span>`);
 	    results.appendChild(result);
 	}
     }
-    document.body.appendChild(results);
+    document.body.appendChild(results);    
 }
 
 function drawGraph(values) {
@@ -102,11 +67,11 @@ function drawGraph(values) {
 	}
     }
 
-    const paddingFactor = 0.10;
-    const barWidth      = graphWidth / (values.length + paddingFactor);
-    const padding       = barWidth * paddingFactor
+    let   barWidth = graphWidth / values.length;
+    const padding  = 0.1 * barWidth;
+    barWidth       = barWidth - padding - padding / values.length;
 
-    let x = 0;
+    let x = padding;
     for (const value of values) {
 	const barHeight = (value - minValue) / (maxValue - minValue) * (graphHeight - padding);
 	
@@ -135,7 +100,7 @@ function drawGraph(values) {
 	bar.appendChild(heightAnimation);
 	graph.appendChild(bar);
 
-	x += padding + barWidth;
+	x += barWidth + padding;
     }
     
     document.body.appendChild(graph);
