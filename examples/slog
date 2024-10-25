@@ -1,0 +1,18 @@
+2024/10/21 19:46:41 INFO Listening port=8080
+2024/10/21 19:46:49 INFO New signUp request requestId=6961230c-bc7c-4636-a88f-f1f42a9a631d
+2024/10/21 19:46:49 ERROR Password mismatch requestId=6961230c-bc7c-4636-a88f-f1f42a9a631d error="crypto/bcrypt: hashedPassword is not the hash of the given password"
+2024/10/21 19:46:50 INFO New signUp request requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc
+2024/10/21 19:46:50 ERROR Failed to insert user with unique username requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc error="ERROR: duplicate key value violates unique constraint \"users_username_key\" (SQLSTATE 23505)"
+2024/10/21 19:46:52 INFO New signUp request requestId=50c9655a-1a50-4480-84df-02d098531620
+2024/10/21 19:46:52 ERROR Password mismatch requestId=50c9655a-1a50-4480-84df-02d098531620 error="crypto/bcrypt: hashedPassword is not the hash of the given password"
+2024/10/21 19:46:53 INFO New signUp request requestId=f457dd4c-207b-4db3-8c52-afbfd97e636f
+2024/10/21 19:46:53 ERROR Failed to insert user with unique username requestId=f457dd4c-207b-4db3-8c52-afbfd97e636f error="ERROR: duplicate key value violates unique constraint \"users_username_key\" (SQLSTATE 23505)"
+2024/10/21 19:46:54 INFO New signUp request requestId=a6977bb0-feb9-46f5-b301-3ad8041a7b5d
+2024/10/21 19:46:54 ERROR Password mismatch requestId=a6977bb0-feb9-46f5-b301-3ad8041a7b5d error="crypto/bcrypt: hashedPassword is not the hash of the given password"
+2024/10/21 19:46:59 INFO New signUp request requestId=f01dcfee-1d3e-4fba-b9f1-ace395a7791b
+2024/10/21 19:47:18 INFO New signUp request requestId=a825a67c-8e7d-428d-bbd0-570c69ea6343
+2024/10/21 19:47:18 ERROR Failed to find user requestId=a825a67c-8e7d-428d-bbd0-570c69ea6343
+2024/10/21 19:47:19 INFO New signUp request requestId=702d3c59-6166-451f-abd6-d93e02bd72e6
+2024/10/21 19:47:19 ERROR Failed to find user requestId=702d3c59-6166-451f-abd6-d93e02bd72e6
+2024/10/21 19:47:20 INFO New signUp request requestId=0cd5b6c2-3f6d-4dcc-a163-4e19b817a73a
+2024/10/21 19:47:20 ERROR Failed to find user requestId=0cd5b6c2-3f6d-4dcc-a163-4e19b817a73a

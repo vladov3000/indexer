@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
@@ -15,28 +16,6 @@
 
 #define RESPONSE_400 "HTTP/1.1 400\r\nContent-Length: 0\r\n\r\n"
 #define RESPONSE_404 "HTTP/1.1 404\r\nContent-Length: 0\r\n\r\n"
-
-static String logs = R"END(
-2024/10/21 19:46:41 INFO Listening port=8080
-2024/10/21 19:46:49 INFO New signUp request requestId=6961230c-bc7c-4636-a88f-f1f42a9a631d
-2024/10/21 19:46:49 ERROR Password mismatch requestId=6961230c-bc7c-4636-a88f-f1f42a9a631d error="crypto/bcrypt: hashedPassword is not the hash of the given password"
-2024/10/21 19:46:50 INFO New signUp request requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc
-2024/10/21 19:46:50 ERROR Failed to insert user with unique username requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc error="ERROR: duplicate key value violates unique constraint \"users_username_key\" (SQLSTATE 23505)"
-2024/10/21 19:46:52 INFO New signUp request requestId=50c9655a-1a50-4480-84df-02d098531620
-2024/10/21 19:46:52 ERROR Password mismatch requestId=50c9655a-1a50-4480-84df-02d098531620 error="crypto/bcrypt: hashedPassword is not the hash of the given password"
-2024/10/21 19:46:53 INFO New signUp request requestId=f457dd4c-207b-4db3-8c52-afbfd97e636f
-2024/10/21 19:46:53 ERROR Failed to insert user with unique username requestId=f457dd4c-207b-4db3-8c52-afbfd97e636f error="ERROR: duplicate key value violates unique constraint \"users_username_key\" (SQLSTATE 23505)"
-2024/10/21 19:46:54 INFO New signUp request requestId=a6977bb0-feb9-46f5-b301-3ad8041a7b5d
-2024/10/21 19:46:54 ERROR Password mismatch requestId=a6977bb0-feb9-46f5-b301-3ad8041a7b5d error="crypto/bcrypt: hashedPassword is not the hash of the given password"
-2024/10/21 19:46:59 INFO New signUp request requestId=f01dcfee-1d3e-4fba-b9f1-ace395a7791b
-2024/10/21 19:47:18 INFO New signUp request requestId=a825a67c-8e7d-428d-bbd0-570c69ea6343
-2024/10/21 19:47:18 ERROR Failed to find user requestId=a825a67c-8e7d-428d-bbd0-570c69ea6343
-2024/10/21 19:47:19 INFO New signUp request requestId=702d3c59-6166-451f-abd6-d93e02bd72e6
-2024/10/21 19:47:19 ERROR Failed to find user requestId=702d3c59-6166-451f-abd6-d93e02bd72e6
-2024/10/21 19:47:20 INFO New signUp request requestId=0cd5b6c2-3f6d-4dcc-a163-4e19b817a73a
-2024/10/21 19:47:20 ERROR Failed to find user requestId=0cd5b6c2-3f6d-4dcc-a163-4e19b817a73a
-  )END";
-
 
 static I32 bind(I32 fd, struct sockaddr_in address) {
   return bind(fd, (struct sockaddr*) &address, sizeof(address));
@@ -58,6 +37,29 @@ static void write_response(I32 connection_fd, String response) {
   } else if (bytes_written < response.size) {
     println(WARN "Wrote less bytes than expected.");
   }
+}
+
+static String read_file(const char* path) {
+  I32 fd = open(path, O_RDONLY);
+  if (fd == -1) {
+    println(ERROR "Failed to open \"", path, "\": ", get_error(), '.');
+    exit(EXIT_FAILURE);
+  }
+
+  struct stat info = {};
+  if (fstat(fd, &info) == -1) {
+    println(ERROR "Failed to stat \"", path, "\": ", get_error(), '.');
+    exit(EXIT_FAILURE);
+  }
+
+  String result = {};
+  result.size   = info.st_size;
+  result.data   = (U8*) mmap(NULL, result.size, PROT_READ, MAP_PRIVATE, fd, 0);
+  if (result.data == MAP_FAILED) {
+    println(ERROR "Failed to mmap \"", path, "\": ", get_error(), '.');
+    exit(EXIT_FAILURE);
+  }
+  return result;
 }
 
 struct Parameters {
@@ -101,7 +103,7 @@ static time_t parse_time(String input, const char* format) {
   return mktime(&time);
 }
 
-static String query(Parameters parameters, I32 bins, I32* histogram) {
+static String query(String logs, Parameters parameters, I32 bins, I32* histogram) {
   const char* query_time_format = "%Y-%m-%dT%H:%M";
   const char* log_time_format   = "%Y/%m/%d %H:%M:%S";
   
@@ -132,9 +134,17 @@ static String query(Parameters parameters, I32 bins, I32* histogram) {
   return result;
 }
 
-int main() {
+I32 main(I32 argc, char** argv) {
   atexit(flush);
 
+  if (argc != 2) {
+    print(ERROR "Expected exactly one argument, the path to the log file.\n");
+    exit(EXIT_FAILURE);
+  }
+
+  char*  logs_path = argv[1];
+  String logs      = read_file(logs_path);
+  
   I64 port = 2000;
   
   I32 listen_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -200,7 +210,7 @@ int main() {
 	  I32 histogram[100] = {};
 	  I32 bins           = length(histogram);
 
-	  String filtered_logs = query(parameters, bins, histogram);
+	  String filtered_logs = query(logs,parameters, bins, histogram);
 
 	  I64 content_length = sizeof(bins) + sizeof(histogram) + filtered_logs.size;
 	  U8  storage[20]    = {};
