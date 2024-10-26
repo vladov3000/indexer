@@ -7,10 +7,12 @@
   </head>
   <body>
     <div id="query">
-      <textarea id="queryInput"></textarea>
+      <textarea id="queryInput" placeholder="Type your query here..."></textarea>
       <div id="times">
-	<input type="datetime-local" id="startTime"></input>
-	<input type="datetime-local" id="endTime"></input>
+	<label for="startTime">Start</label>
+	<input type="datetime-local" id="startTime" name="startTime"></input>
+	<label for="endTime">End</label>
+	<input type="datetime-local" id="endTime" name="endTime"></input>
       </div>
       <button id="queryButton">Query</button>
     </div>

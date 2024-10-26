@@ -23,7 +23,7 @@ async function onQueryClick() {
 
     const startTime = document.getElementById("startTime").value;
     const endTime   = document.getElementById("endTime").value;    
-    
+
     const response  = await fetch(`/api/query?query=${query}&start=${startTime}&end=${endTime}`);
     const body      = await response.arrayBuffer();
     const binsView  = new Uint8Array(body, 0, 4);
@@ -31,9 +31,9 @@ async function onQueryClick() {
     const bins      = binsView[0] + (binsView[1] << 8) + (binsView[2] << 16) + (binsView[3] << 24);
     const histogram = new Int32Array(body, 4, bins);
     const logs      = new TextDecoder().decode(new Uint8Array(body, (bins + 1) * 4));
-    
+
     document.body.replaceChildren(document.body.children[0]);
-    drawGraph(histogram);
+    drawGraph(logs.length == 0 ? null : histogram);
 
     const results = document.createElement("div");
     results.setAttribute("id", "results");
@@ -55,6 +55,18 @@ function drawGraph(values) {
     const graph = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     graph.setAttribute("width", graphWidth);
     graph.setAttribute("height", graphHeight);
+    document.body.appendChild(graph);
+
+    if (values == null) {
+	const text       = document.createElementNS("http://www.w3.org/2000/svg", "text");
+	text.textContent = "No matches found.";
+	text.setAttribute("text-anchor", "middle");
+	text.setAttribute("font-size", "1.5em");
+	text.setAttribute("x", "50%");
+	text.setAttribute("y", "50%");
+	graph.appendChild(text);
+	return;
+    }
 
     let maxValue = values[0];
     let minValue = values[0];
@@ -78,7 +90,7 @@ function drawGraph(values) {
 	const bar = document.createElementNS("http://www.w3.org/2000/svg", "rect");
 	bar.setAttribute("x", x);
 	bar.setAttribute("width", barWidth);
-	bar.setAttribute("fill", "#F5FF90");
+	bar.setAttribute("fill", "#f9a31b");
 
 	const splines = "0 0.5 0 0.5; 0 0.5 0 0.5";
 
@@ -102,8 +114,6 @@ function drawGraph(values) {
 
 	x += barWidth + padding;
     }
-    
-    document.body.appendChild(graph);
 }
 
 window.addEventListener("load", load);

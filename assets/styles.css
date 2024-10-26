@@ -1,9 +1,16 @@
-/* Color pallete: https://coolors.co/d6ffb7-f5ff90-ffc15e-ff9f1c-080357 */
+/* Color pallete: https://lospec.com/palette-list/aap-64 */
+
+:root {
+    --background-color: #122020;
+    --border-color: #1a7a3e;
+    --text-color: #e3e6ff;
+    --shadow-color: #5daf8d;
+}
 
 body {
     align-items: center;
-    background-color: #111111;
-    color: #EEEEEE;
+    background-color: #141013;
+    color: var(--text-color);
     display: flex;
     flex-direction: column;
     gap: 1em;
@@ -16,64 +23,91 @@ body {
 }
 
 textarea {
-    background-color: #222222;
-    border-color: #767676;
-    color: #EEEEEE;
+    background-color: var(--background-color);
+    border: 0.05em solid var(--border-color);
+    border-radius: 0.25em;
+    box-shadow: 0 0 0.25em var(--shadow-color);
+    color: var(--text-color);
     font-size: 1.5em;
     width: 100%;
 }
 
 textarea:focus {
-    border-color: #D6FFB7;
+    border-color: #d6f264;
     outline: none;
 }
 
+textarea::placeholder {
+    color: var(--text-color);
+    opacity: 0.5;
+}
+
 button {
-    background-color: #FF9F1C;
-    border-color: #FFC15E;
-    color: black;
+    background-color: #f9a31b;
+    border: 0.2em outset #ffd541;
+    color: #060608;
     font-size: 1.5em;
 }
 
 button:focus {
-    border-color: #D6FFB7;
-    outline: none;
+    border-style: inset;
+    outline-color: #df3e23;
 }
 
 svg {
-    background-color: #222222;
-    border: 1px solid #767676;
+    background-color: var(--background-color);
+    border: 0.05em solid var(--border-color);
+    border-radius: 0.25em;
+    box-shadow: 0 0 0.25em var(--shadow-color);
+}
+
+svg text {
+    fill: var(--text-color);
+}
+
+#results {
+    background-color: var(--background-color);
+    border: 0.05em solid var(--border-color);
+    border-radius: 0.25em;
+    box-shadow: 0 0 0.25em var(--shadow-color);
 }
 
 p {
-    background-color: #222222;
-    border: 1px solid #767676;
+    border-bottom: 0.05em solid #4a5462;
     padding: 0.5em;
-    border-radius: 0.1em;
     margin: 0;
 }
 
 .found {
-    color: #FF9F1C;
+    color: #f9a31b;
     font-weight: bold;
 }
 
 #times {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-evenly;
+    align-items: center;
+    background-color: var(--background-color);
+    border: 0.05em solid var(--border-color);
+    border-radius: 0.25em;
+    box-shadow: 0 0 0.25em var(--shadow-color);
+    display: inline-grid;
+    gap: 0.5em;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    justify-items: center;
+    padding: 0.5em;
 }
 
 input[type=datetime-local] {
-    background-color: #222222;
-    border: 1px solid #767676;
-    color: #EEEEEE;
+    background-color: #23674e;
+    border: 0.1em outset #5daf8d;
+    color: var(--text-color);
     color-scheme: dark;
     display: inline;
     height: 100%;
 }
 
 input:focus {
-    border-color: #D6FFB7;
+    border-color: #d6f264;
     outline: none;
 }
+
