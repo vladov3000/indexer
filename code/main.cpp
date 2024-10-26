@@ -407,6 +407,8 @@ I32 main(I32 argc, char** argv) {
 	    if (send_result == -1) {
 	      println(ERROR "Failed to send file: ", get_error(), '.');
 	    }
+
+	    assert(close(file_fd) == 0);
 	  }
 	}
       }
