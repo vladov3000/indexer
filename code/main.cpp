@@ -117,8 +117,7 @@ struct Node {
   String word;
   I64    first_offset;
   I64    last_offset;
-  I64    left;
-  I64    right;
+  I64    children[2];
 };
 
 static Node nodes[32 * 1024];
@@ -137,11 +136,21 @@ static I64 check_node(I64 node_index) {
   assert(0 < node.first_offset && node.first_offset < offset_count);
   assert(0 < node.last_offset  && node.last_offset  < offset_count);
 
-  I64 left_depth  = check_node(node.left);
-  I64 right_depth = check_node(node.right);
-  I64 inbalance   = abs(left_depth - right_depth);
+  I64 max_depth = 0;
+  I64 min_depth = 0;
+  for (I64 i = 0; i < length(node.children); i++) {
+    I64 depth = check_node(node.children[i]);
+    if (depth > max_depth) {
+      max_depth = depth;
+    }
+    if (min_depth == 0 || depth < min_depth) {
+      min_depth = depth;
+    }
+  }
+  
+  I64 inbalance   = abs(max_depth - min_depth);
   // assert(inbalance <= 1);
-  return max(left_depth, right_depth) + 1;
+  return max_depth + 1;
 }
 
 static I64 make_node(String word, I64 value) {
@@ -164,16 +173,16 @@ static void insert(I64 node_index, String word, I64 offset) {
   Node* node       = &nodes[node_index];
   I32   comparison = compare(word, node->word);
   if (comparison < 0) {
-    if (node->left == 0) {
-      node->left = make_node(word, offset);
+    if (node->children[0] == 0) {
+      node->children[0] = make_node(word, offset);
     } else {
-      insert(node->left, word, offset);
+      insert(node->children[0], word, offset);
     }
   } else if (comparison > 0) {
-    if (node->right == 0) {
-      node->right = make_node(word, offset);
+    if (node->children[1] == 0) {
+      node->children[1] = make_node(word, offset);
     } else {
-      insert(node->right, word, offset);
+      insert(node->children[1], word, offset);
     }
   } else if (comparison == 0) {
     Offset* last      = &offsets[node->last_offset];
@@ -186,9 +195,9 @@ static I64 lookup(I64 node_index, String word) {
   Node* node       = &nodes[node_index];
   I32   comparison = compare(word, node->word);
   if (comparison < 0) {
-    return node->left == 0 ? 0 : lookup(node->left, word);
+    return node->children[0] == 0 ? 0 : lookup(node->children[0], word);
   } else if (comparison > 0) {
-    return node->right == 0 ? 0 : lookup(node->right, word);
+    return node->children[0] == 0 ? 0 : lookup(node->children[1], word);
   } else {
     return node->first_offset;
   }
