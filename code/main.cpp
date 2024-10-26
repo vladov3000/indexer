@@ -122,8 +122,27 @@ struct Node {
 };
 
 static Node nodes[32 * 1024];
-static I64  node_count;
-static I64  node_root;
+static I64  node_count = 1;
+static I64  node_root  = 1;
+
+static I64 check_node(I64 node_index) {
+  if (node_index == 0) {
+    return 0;
+  }
+  
+  assert(0 < node_index && node_index < node_count);
+
+  Node node = nodes[node_index];
+  assert(node.word.size > 0);
+  assert(0 < node.first_offset && node.first_offset < offset_count);
+  assert(0 < node.last_offset  && node.last_offset  < offset_count);
+
+  I64 left_depth  = check_node(node.left);
+  I64 right_depth = check_node(node.right);
+  I64 inbalance   = abs(left_depth - right_depth);
+  // assert(inbalance <= 1);
+  return max(left_depth, right_depth) + 1;
+}
 
 static I64 make_node(String word, I64 value) {
   if (node_count == length(nodes)) {
@@ -137,7 +156,7 @@ static I64 make_node(String word, I64 value) {
 }
 
 static void insert(I64 node_index, String word, I64 offset) {
-  if (node_count == 0) {
+  if (node_count == 1) {
     make_node(word, offset);
     return;
   }
@@ -187,6 +206,7 @@ static void index(String logs) {
 	    if (word_start != j) {
 	      String word = slice(line, word_start, j);
 	      insert(node_root, word, line_start);
+	      check_node(node_root);
 	    }
 	    word_start = j + 1;
 	  }
