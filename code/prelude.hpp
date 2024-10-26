@@ -45,6 +45,19 @@ static bool operator==(String a, String b) {
   return a.size == b.size && memcmp(a.data, b.data, a.size) == 0;
 }
 
+static I32 compare(String a, String b) {
+  I32 comparison = memcmp(a.data, b.data, min(a.size, b.size));
+  if (comparison == 0) {
+    if (a.size == b.size) {
+      return 0;
+    } else {
+      return a.size < b.size ? -1 : 1;
+    }
+  } else {
+    return comparison;
+  }
+}
+
 static bool starts_with(String base, String prefix) {
   return prefix.size <= base.size && memcmp(base.data, prefix.data, prefix.size) == 0;
 }

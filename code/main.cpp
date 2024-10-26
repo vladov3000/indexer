@@ -95,7 +95,109 @@ static Parameters parse_parameters(String input) {
   return parameters;
 }
 
-U8 query_buffer[4096];
+struct Offset {
+  I64 value;
+  I64 next;
+};
+
+static Offset offsets[32 * 1024];
+static I64    offset_count = 1;
+
+static I64 make_offset(I64 value) {
+  if (offset_count == length(offsets)) {
+    return 0;
+  }
+  Offset* offset = &offsets[offset_count];
+  offset->value  = value;
+  return offset_count++;
+}
+
+struct Node {
+  U32    black;
+  String word;
+  I64    first_offset;
+  I64    last_offset;
+  I64    left;
+  I64    right;
+};
+
+static Node nodes[32 * 1024];
+static I64  node_count;
+static I64  node_root;
+
+static I64 make_node(String word, I64 value) {
+  if (node_count == length(nodes)) {
+    return 0;
+  }
+  Node* node         = &nodes[node_count];
+  node->word         = word;
+  node->first_offset = make_offset(value);
+  node->last_offset  = node->first_offset;
+  return node_count++;
+}
+
+static void insert(I64 node_index, String word, I64 offset) {
+  if (node_count == 0) {
+    make_node(word, offset);
+    return;
+  }
+  
+  Node* node       = &nodes[node_index];
+  I32   comparison = compare(word, node->word);
+  if (comparison < 0) {
+    if (node->left == 0) {
+      node->left = make_node(word, offset);
+    } else {
+      insert(node->left, word, offset);
+    }
+  } else if (comparison > 0) {
+    if (node->right == 0) {
+      node->right = make_node(word, offset);
+    } else {
+      insert(node->right, word, offset);
+    }
+  } else if (comparison == 0) {
+    Offset* last      = &offsets[node->last_offset];
+    last->next        = make_offset(offset);
+    node->last_offset = last->next;
+  }
+}
+
+static I64 lookup(I64 node_index, String word) {
+  Node* node       = &nodes[node_index];
+  I32   comparison = compare(word, node->word);
+  if (comparison < 0) {
+    return node->left == 0 ? 0 : lookup(node->left, word);
+  } else if (comparison > 0) {
+    return node->right == 0 ? 0 : lookup(node->right, word);
+  } else {
+    return node->first_offset;
+  }
+}
+
+static void index(String logs) {
+  I64 line_start = 0;
+  for (I64 i = 0; i <= logs.size; i++) {
+    if (i == logs.size || logs[i] == '\n') {
+      if (line_start != i) {
+	String line       = slice(logs, line_start, i);
+	I64    word_start = 0;
+	for (I64 j = 0; j <= line.size; j++) {
+	  if (j == line.size || line[j] == ' ') {
+	    if (word_start != j) {
+	      String word = slice(line, word_start, j);
+	      insert(node_root, word, line_start);
+	    }
+	    word_start = j + 1;
+	  }
+	}
+      }
+      line_start = i + 1;
+    }
+  }  
+}
+
+static U8 query_buffer[4096];
 
 static time_t parse_time(String input, const char* format) {
   struct tm time = {};
@@ -109,10 +211,36 @@ static String query(String logs, Parameters parameters, I32 bins, I32* histogram
   
   time_t start_time = parse_time(parameters.start, query_time_format);
   time_t end_time   = parse_time(parameters.end, query_time_format);
-  
+
+  String result       = String(query_buffer, 0);
+  I64    offset_index = lookup(node_root, parameters.query);
+  while (offset_index != 0) {
+    Offset offset = offsets[offset_index];
+    
+    String line     = suffix(logs, offset.value);
+    I64    line_end = find(line, '\n');
+    line            = prefix(line, line_end + 1);
+
+    time_t time = parse_time(line, log_time_format);
+    if (start_time <= time && time <= end_time && contains(line, parameters.query)) {
+      if (line.size > sizeof(query_buffer) - result.size) {
+	break;
+      }
+      memcpy(&result.data[result.size], line.data, line.size);
+      result.size += line.size;
+
+      F32 value = (F32) (time - start_time) / (end_time - start_time);
+      histogram[(I32) (bins * value)]++;      
+    }
+
+    offset_index = offset.next;
+  }
+  return result;
+
+  /*
   String result     = String(query_buffer, 0);
-  I64    line_start = 0;
-  for (I64 i = 0; i <= logs.size; i++) {
+  I64    line_start = offset;
+  for (I64 i = offset; i <= logs.size; i++) {
     if (i == logs.size || logs[i] == '\n') {
       if (line_start != i) {
 	String line = slice(logs, line_start, i + 1);
@@ -132,6 +260,7 @@ static String query(String logs, Parameters parameters, I32 bins, I32* histogram
     }
   }
   return result;
+  */
 }
 
 I32 main(I32 argc, char** argv) {
@@ -144,6 +273,8 @@ I32 main(I32 argc, char** argv) {
 
   char*  logs_path = argv[1];
   String logs      = read_file(logs_path);
+  println(INFO "Indexing ", logs_path, '.');
+  index(logs);
   
   I64 port = 2000;
   
