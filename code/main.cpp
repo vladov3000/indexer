@@ -236,31 +236,6 @@ static String query(String logs, Parameters parameters, I32 bins, I32* histogram
     offset_index = offset.next;
   }
   return result;
-
-  /*
-  String result     = String(query_buffer, 0);
-  I64    line_start = offset;
-  for (I64 i = offset; i <= logs.size; i++) {
-    if (i == logs.size || logs[i] == '\n') {
-      if (line_start != i) {
-	String line = slice(logs, line_start, i + 1);
-	time_t time = parse_time(line, log_time_format);
-	if (start_time <= time && time <= end_time && contains(line, parameters.query)) {
-	  if (line.size > sizeof(query_buffer) - result.size) {
-	    break;
-	  }
-	  memcpy(&result.data[result.size], line.data, line.size);
-	  result.size += line.size;
-
-	  F32 value = (F32) (time - start_time) / (end_time - start_time);
-	  histogram[(I32) (bins * value)]++;
-	}
-      }
-      line_start = i + 1;
-    }
-  }
-  return result;
-  */
 }
 
 I32 main(I32 argc, char** argv) {
