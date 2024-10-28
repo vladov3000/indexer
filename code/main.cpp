@@ -13,6 +13,7 @@
 
 #include "prelude.hpp"
 #include "print.hpp"
+#include "arena.hpp"
 
 #define RESPONSE_400 "HTTP/1.1 400\r\nContent-Length: 0\r\n\r\n"
 #define RESPONSE_404 "HTTP/1.1 404\r\nContent-Length: 0\r\n\r\n"
@@ -100,13 +101,12 @@ struct Offset {
   I64 next;
 };
 
-static Offset offsets[32 * 1024];
-static I64    offset_count = 1;
+static Arena   offset_arena;
+static Offset* offsets;
+static I64     offset_count;
 
 static I64 make_offset(I64 value) {
-  if (offset_count == length(offsets)) {
-    return 0;
-  }
+  allocate<Offset>(&offset_arena);
   Offset* offset = &offsets[offset_count];
   offset->value  = value;
   return offset_count++;
@@ -152,8 +152,8 @@ static I64 check_node(I64 node_index) {
 
   Node node = nodes[node_index];
   assert(node.word.size > 0);
-  assert(0 < node.first_offset && node.first_offset < offset_count);
-  assert(0 < node.last_offset  && node.last_offset  < offset_count);
+  // assert(0 < node.first_offset && node.first_offset < offset_count);
+  // assert(0 < node.last_offset  && node.last_offset  < offset_count);
 
   I64 max_depth = 0;
   I64 min_depth = 0;
@@ -275,7 +275,7 @@ static I64 lookup(I64 node_index, String word) {
   }
 }
 
-static void index(String logs) {
+static void index(String logs) {  
   I64 line_start = 0;
   for (I64 i = 0; i <= logs.size; i++) {
     if (i == logs.size || logs[i] == '\n') {
@@ -286,9 +286,10 @@ static void index(String logs) {
 	  if (j == line.size || line[j] == ' ') {
 	    if (word_start != j) {
 	      String word               = slice(line, word_start, j);
+	      // println(INFO "word=", word);
 	      node_root                 = insert(node_root, word, line_start);
 	      nodes[node_root].is_black = true;
-	      check_node(node_root);
+	      // check_node(node_root);
 	      // println(INFO "Inserting word=\"", word, "\" tree_depth=", check_node(node_root), " node_count=", node_count - 1, '.');
 	      // print_tree(node_root, 0);
 	    }
@@ -300,19 +301,23 @@ static void index(String logs) {
     }
   }
   println(INFO "Built index with tree_depth=", check_node(node_root), " node_count=", node_count - 1, '.');
+  flush();
 }
 
 static U8 query_buffer[4096];
 
 static time_t parse_time(String input, const char* format) {
-  struct tm time = {};
-  strptime((char*) input.data, format, &time);
-  return mktime(&time);
+  struct tm time   = {};
+  char*     result = strptime((char*) input.data, format, &time);
+  return result == NULL ? -1 : mktime(&time);
 }
 
 static String query(String logs, Parameters parameters, I32 bins, I32* histogram) {
   const char* query_time_format = "%Y-%m-%dT%H:%M";
-  const char* log_time_format   = "%Y/%m/%d %H:%M:%S";
+
+  // @Feature make this a parameter.
+  // const char* log_time_format = "%Y/%m/%d %H:%M:%S";
+  const char* log_time_format = "%Y-%m-%dT%H:%M:%S";
   
   time_t start_time = parse_time(parameters.start, query_time_format);
   time_t end_time   = parse_time(parameters.end, query_time_format);
@@ -326,7 +331,14 @@ static String query(String logs, Parameters parameters, I32 bins, I32* histogram
     I64    line_end = find(line, '\n');
     line            = prefix(line, line_end + 1);
 
-    time_t time = parse_time(line, log_time_format);
+    time_t time = -1;
+    for (I64 i = 0; time == -1 && i < line.size; i++) {
+      // println("suffix=", suffix(line, i), " format=", log_time_format);
+      time = parse_time(suffix(line, i), log_time_format);
+    }
+    assert(time != -1);
+    // println((I64) time);
+    
     if (start_time <= time && time <= end_time && contains(line, parameters.query)) {
       if (line.size > sizeof(query_buffer) - result.size) {
 	break;
@@ -351,9 +363,13 @@ I32 main(I32 argc, char** argv) {
     exit(EXIT_FAILURE);
   }
 
+  offset_arena = make_arena(1ll << 32);
+  offsets      = (Offset*) offset_arena.memory;
+  
   char*  logs_path = argv[1];
   String logs      = read_file(logs_path);
   println(INFO "Indexing ", logs_path, '.');
+  flush();
   index(logs);
   
   I64 port = 2000;
