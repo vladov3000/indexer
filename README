@@ -1,0 +1,10 @@
+Edgar
+=====
+Edgar is an example project. To retrieve the data from the source, run the following commands:
+$ scp -r -P 16022 edgar@50.35.78.51:/tmp/edgar-api edgar-api
+$ scp -r -P 16022 edgar@50.35.78.51:/tmp/edgar-scraper edgar-scraper
+
+
+Model
+=====
+Download a model from https://huggingface.co/TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF/tree/main
