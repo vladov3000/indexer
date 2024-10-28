@@ -113,7 +113,7 @@ static I64 make_offset(I64 value) {
 }
 
 struct Node {
-  U32    black;
+  U32    is_black;
   String word;
   I64    first_offset;
   I64    last_offset;
@@ -123,6 +123,25 @@ struct Node {
 static Node nodes[32 * 1024];
 static I64  node_count = 1;
 static I64  node_root  = 1;
+
+static void print_tree(I64 node_index, I64 indents) {
+  for (I64 i = 0; i < indents; i++) {
+    print(' ');
+  }
+
+  if (node_index == 0) {
+    println("nil");
+  } else {
+    Node   node  = nodes[node_index];
+    String color = node.is_black == 0 ? "\x1b[31m" : "\x1b[30m\x1b[47m";
+    String clear = "\x1b[0m";
+    println(color, node.word, clear);
+  
+    for (I64 i = 0; i < length(node.children); i++) {
+      print_tree(node.children[i], indents + 1);
+    }
+  }
+}
 
 static I64 check_node(I64 node_index) {
   if (node_index == 0) {
@@ -139,7 +158,19 @@ static I64 check_node(I64 node_index) {
   I64 max_depth = 0;
   I64 min_depth = 0;
   for (I64 i = 0; i < length(node.children); i++) {
-    I64 depth = check_node(node.children[i]);
+    I64 child_index = node.children[i];
+    if (child_index != 0) {
+      Node child      = nodes[child_index];
+      I32  comparison = compare(node.word, child.word);
+      if (i == 0) {
+	assert(comparison > 0);
+      }
+      if (i == 1) {
+	assert(comparison < 0);
+      }
+    }
+    
+    I64 depth = check_node(child_index);
     if (depth > max_depth) {
       max_depth = depth;
     }
@@ -148,7 +179,10 @@ static I64 check_node(I64 node_index) {
     }
   }
   
-  I64 inbalance   = abs(max_depth - min_depth);
+  I64 inbalance = abs(max_depth - min_depth);
+  if (inbalance > 1) {
+    //println(INFO "max_depth=", max_depth, " min_depth=", min_depth);
+  }
   // assert(inbalance <= 1);
   return max_depth + 1;
 }
@@ -164,31 +198,69 @@ static I64 make_node(String word, I64 value) {
   return node_count++;
 }
 
-static void insert(I64 node_index, String word, I64 offset) {
-  if (node_count == 1) {
-    make_node(word, offset);
-    return;
+static I64 balance(I64 grandparent_index) {
+  Node* grandparent = &nodes[grandparent_index];
+  if (grandparent->is_black) {
+    for (I64 parent_direction = 0; parent_direction < 2; parent_direction++) {
+      I64 parent_index = grandparent->children[parent_direction];
+      if (parent_index != 0) {
+	Node* parent = &nodes[parent_index];
+	if (!parent->is_black) {
+	  I64 child_index = parent->children[parent_direction];
+	  if (child_index != 0) {
+	    Node* child = &nodes[child_index];
+	    if (!child->is_black) {
+	      child->is_black                         = true;
+	      grandparent->children[parent_direction] = parent->children[1 - parent_direction];
+	      parent->children[1 - parent_direction]  = grandparent_index;
+	      return parent_index;
+	    }
+	  }
+	  I64 brother_index = parent->children[1 - parent_direction];
+	  if (brother_index != 0) {
+	    Node* brother = &nodes[brother_index];
+	    if (!brother->is_black) {
+	      parent->is_black                        = true;
+	      parent->children[1 - parent_direction]  = brother->children[parent_direction];
+	      grandparent->children[parent_direction] = brother->children[1 - parent_direction];
+	      brother->children[parent_direction]     = parent_index;
+	      brother->children[1 - parent_direction] = grandparent_index;
+	      return brother_index;
+	    }
+	  }
+	}
+      }
+    }
   }
-  
+  return grandparent_index;
+}
+
+static I64 insert(I64 node_index, String word, I64 offset) {
+  if (node_count == 1) {
+    I64 new_node = make_node(word, offset);
+    nodes[new_node].is_black = true;
+    return new_node;
+  }
   Node* node       = &nodes[node_index];
   I32   comparison = compare(word, node->word);
   if (comparison < 0) {
     if (node->children[0] == 0) {
       node->children[0] = make_node(word, offset);
     } else {
-      insert(node->children[0], word, offset);
+      node->children[0] = insert(node->children[0], word, offset);
     }
   } else if (comparison > 0) {
     if (node->children[1] == 0) {
       node->children[1] = make_node(word, offset);
     } else {
-      insert(node->children[1], word, offset);
+      node->children[1] = insert(node->children[1], word, offset);
     }
   } else if (comparison == 0) {
     Offset* last      = &offsets[node->last_offset];
     last->next        = make_offset(offset);
     node->last_offset = last->next;
   }
+  return balance(node_index);
 }
 
 static I64 lookup(I64 node_index, String word) {
@@ -213,9 +285,12 @@ static void index(String logs) {
 	for (I64 j = 0; j <= line.size; j++) {
 	  if (j == line.size || line[j] == ' ') {
 	    if (word_start != j) {
-	      String word = slice(line, word_start, j);
-	      insert(node_root, word, line_start);
+	      String word               = slice(line, word_start, j);
+	      node_root                 = insert(node_root, word, line_start);
+	      nodes[node_root].is_black = true;
 	      check_node(node_root);
+	      // println(INFO "Inserting word=\"", word, "\" tree_depth=", check_node(node_root), " node_count=", node_count - 1, '.');
+	      // print_tree(node_root, 0);
 	    }
 	    word_start = j + 1;
 	  }
@@ -223,7 +298,8 @@ static void index(String logs) {
       }
       line_start = i + 1;
     }
-  }  
+  }
+  println(INFO "Built index with tree_depth=", check_node(node_root), " node_count=", node_count - 1, '.');
 }
 
 static U8 query_buffer[4096];
