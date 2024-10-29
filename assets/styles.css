@@ -59,7 +59,6 @@ svg {
     border: 0.05em solid var(--border-color);
     border-radius: 0.25em;
     box-shadow: 0 0 0.25em var(--shadow-color);
-    width: 100%;
 }
 
 svg text {

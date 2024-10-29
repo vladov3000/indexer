@@ -309,7 +309,7 @@ static String query(Node* node_root, String logs, Parameters parameters, I32 bin
   String  result     = String(arena.memory, 0);
   Offset* offset     = lookup(node_root, parameters.query);
   I64     line_count = 0;
-  while (offset != nullptr) {
+  while (offset != nullptr && line_count < 256) {
     String line     = suffix(logs, offset->value);
     I64    line_end = find(line, '\n');
     line            = prefix(line, line_end + 1);
