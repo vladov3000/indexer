@@ -97,26 +97,22 @@ static Parameters parse_parameters(String input) {
 }
 
 struct Offset {
-  I64 value;
-  I64 next;
+  I64     value;
+  Offset* next;
 };
 
-static Arena   offset_arena;
-static Offset* offsets;
-static I64     offset_count = 1;
-
-static I64 make_offset(I64 value) {
-  Offset* offset = &offsets[offset_count];
+static Offset* make_offset(Arena* arena, I64 value) {
+  Offset* offset = allocate<Offset>(arena);
   offset->value  = value;
-  return offset_count++;
+  return offset;
 }
 
 struct Node {
-  U32    is_black;
-  String word;
-  I64    first_offset;
-  I64    last_offset;
-  Node*  children[2];
+  U32     is_black;
+  String  word;
+  Offset* first_offset;
+  Offset* last_offset;
+  Node*   children[2];
 };
 
 /* @Debugging port this to use a Node*
@@ -187,7 +183,7 @@ static I64 check_node(I64 node_index) {
 static Node* make_node(Arena* arena, String word, I64 value) {
   Node* node         = allocate<Node>(arena);
   node->word         = word;
-  node->first_offset = make_offset(value);
+  node->first_offset = make_offset(arena, value);
   node->last_offset  = node->first_offset;
   return node;
 }
@@ -235,14 +231,14 @@ static Node* insert(Arena* arena, Node* node, String word, I64 offset) {
   } else if (comparison > 0) {
     node->children[1] = insert(arena, node->children[1], word, offset);
   } else if (comparison == 0) {
-    Offset* last      = &offsets[node->last_offset];
-    last->next        = make_offset(offset);
+    Offset* last      = node->last_offset;
+    last->next        = make_offset(arena, offset);
     node->last_offset = last->next;
   }
   return balance(node);
 }
 
-static I64 lookup(Node* node, String word) {
+static Offset* lookup(Node* node, String word) {
   if (node == nullptr) {
     return 0;
   }
@@ -321,14 +317,13 @@ static String query(Node* node_root, String logs, Parameters parameters, I32 bin
   time_t start_time = parse_time(parameters.start, query_time_format);
   time_t end_time   = parse_time(parameters.end, query_time_format);
 
-  String result       = String(query_arena.memory, 0);
-  I64    offset_index = lookup(node_root, parameters.query);
-  I64    line_count   = 0;
-  while (offset_index != 0) {
-    Offset offset = offsets[offset_index];
+  String  result     = String(query_arena.memory, 0);
+  Offset* offset     = lookup(node_root, parameters.query);
+  I64     line_count = 0;
+  while (offset != nullptr) {
     // println(INFO "offset=", offset.value);
 
-    String line     = suffix(logs, offset.value);
+    String line     = suffix(logs, offset->value);
     I64    line_end = find(line, '\n');
     line            = prefix(line, line_end + 1);
 
@@ -351,7 +346,7 @@ static String query(Node* node_root, String logs, Parameters parameters, I32 bin
       histogram[(I32) (bins * value)]++;      
     }
 
-    offset_index = offset.next;
+    offset = offset->next;
     line_count++;
   }
   query_arena.used = 0;
@@ -365,10 +360,6 @@ I32 main(I32 argc, char** argv) {
     print(ERROR "Expected exactly one argument, the path to the log file.\n");
     exit(EXIT_FAILURE);
   }
-
-  offset_arena = make_arena(1ll << 32);
-  offsets      = (Offset*) offset_arena.memory;
-  allocate<Offset>(&offset_arena);
 
   query_arena = make_arena(1ll << 32);
 
