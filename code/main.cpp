@@ -103,10 +103,9 @@ struct Offset {
 
 static Arena   offset_arena;
 static Offset* offsets;
-static I64     offset_count;
+static I64     offset_count = 1;
 
 static I64 make_offset(I64 value) {
-  allocate<Offset>(&offset_arena);
   Offset* offset = &offsets[offset_count];
   offset->value  = value;
   return offset_count++;
@@ -120,9 +119,10 @@ struct Node {
   I64    children[2];
 };
 
-static Node nodes[32 * 1024];
-static I64  node_count = 1;
-static I64  node_root  = 1;
+static Node* nodes;
+static Arena node_arena;
+static I64   node_count = 1;
+static I64   node_root  = 1;
 
 static void print_tree(I64 node_index, I64 indents) {
   for (I64 i = 0; i < indents; i++) {
@@ -188,10 +188,7 @@ static I64 check_node(I64 node_index) {
 }
 
 static I64 make_node(String word, I64 value) {
-  if (node_count == length(nodes)) {
-    return 0;
-  }
-  Node* node         = &nodes[node_count];
+  Node* node         = allocate<Node>(&node_arena);
   node->word         = word;
   node->first_offset = make_offset(value);
   node->last_offset  = node->first_offset;
@@ -304,7 +301,8 @@ static void index(String logs) {
   flush();
 }
 
-static U8 query_buffer[4096];
+
+static Arena query_arena;
 
 static time_t parse_time(String input, const char* format) {
   struct tm time   = {};
@@ -322,10 +320,12 @@ static String query(String logs, Parameters parameters, I32 bins, I32* histogram
   time_t start_time = parse_time(parameters.start, query_time_format);
   time_t end_time   = parse_time(parameters.end, query_time_format);
 
-  String result       = String(query_buffer, 0);
+  String result       = String(query_arena.memory, 0);
   I64    offset_index = lookup(node_root, parameters.query);
+  I64    offset_results = 0;
   while (offset_index != 0) {
     Offset offset = offsets[offset_index];
+    // println(INFO "offset=", offset.value);
     
     String line     = suffix(logs, offset.value);
     I64    line_end = find(line, '\n');
@@ -337,13 +337,11 @@ static String query(String logs, Parameters parameters, I32 bins, I32* histogram
       time = parse_time(suffix(line, i), log_time_format);
     }
     assert(time != -1);
-    // println((I64) time);
+    assert(contains(line, parameters.query));
     
-    if (start_time <= time && time <= end_time && contains(line, parameters.query)) {
-      if (line.size > sizeof(query_buffer) - result.size) {
-	break;
-      }
-      memcpy(&result.data[result.size], line.data, line.size);
+    if (start_time <= time && time <= end_time) {
+      String query_result = allocate_bytes(&query_arena, line.size, 1);
+      memcpy(query_result.data, line.data, line.size);
       result.size += line.size;
 
       F32 value = (F32) (time - start_time) / (end_time - start_time);
@@ -351,7 +349,9 @@ static String query(String logs, Parameters parameters, I32 bins, I32* histogram
     }
 
     offset_index = offset.next;
+    offset_results++;
   }
+  // println(INFO "offset_results=", offset_results);
   return result;
 }
 
@@ -365,6 +365,13 @@ I32 main(I32 argc, char** argv) {
 
   offset_arena = make_arena(1ll << 32);
   offsets      = (Offset*) offset_arena.memory;
+  allocate<Offset>(&offset_arena);
+
+  node_arena = make_arena(1ll << 32);
+  nodes      = (Node*) node_arena.memory;
+  allocate<Node>(&node_arena);
+
+  query_arena = make_arena(1ll << 32);
   
   char*  logs_path = argv[1];
   String logs      = read_file(logs_path);

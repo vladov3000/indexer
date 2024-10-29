@@ -18,12 +18,16 @@ static I64 align(I64 address, I64 alignment) {
   return (address + alignment - 1) & ~(alignment - 1);
 }
 
+static String allocate_bytes(Arena* arena, I64 size, I64 alignment) {
+  arena->used = align(arena->used, alignment);
+  U8* result  = (U8*) &arena->memory[arena->used];
+  memset(result, 0, size);
+  arena->used += size;
+  assert(arena->used <= arena->size);
+  return String(result, size);
+}
+
 template <typename T>
 static T* allocate(Arena* arena) {
-  arena->used = align(arena->used, alignof(T));
-  T* result   = (T*) &arena->memory[arena->used];
-  memset(result, 0, sizeof(T));
-  arena->used += sizeof(T);
-  assert(arena->used <= arena->size);
-  return result;
+  return (T*) allocate_bytes(arena, sizeof(T), alignof(T)).data;
 }
