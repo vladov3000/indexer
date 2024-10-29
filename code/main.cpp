@@ -298,9 +298,6 @@ static Node* index(String logs) {
   return node_root;
 }
 
-
-static Arena query_arena;
-
 static time_t parse_time(String input, const char* format) {
   struct tm time   = {};
   char*     result = strptime((char*) input.data, format, &time);
@@ -308,6 +305,8 @@ static time_t parse_time(String input, const char* format) {
 }
 
 static String query(Node* node_root, String logs, Parameters parameters, I32 bins, I32* histogram) {
+  Arena arena = make_arena(1ll << 32);
+  
   const char* query_time_format = "%Y-%m-%dT%H:%M";
 
   // @Feature make this a parameter.
@@ -317,7 +316,7 @@ static String query(Node* node_root, String logs, Parameters parameters, I32 bin
   time_t start_time = parse_time(parameters.start, query_time_format);
   time_t end_time   = parse_time(parameters.end, query_time_format);
 
-  String  result     = String(query_arena.memory, 0);
+  String  result     = String(arena.memory, 0);
   Offset* offset     = lookup(node_root, parameters.query);
   I64     line_count = 0;
   while (offset != nullptr) {
@@ -337,7 +336,7 @@ static String query(Node* node_root, String logs, Parameters parameters, I32 bin
     
     if (start_time <= time && time <= end_time) {
       if (line_count < 256) {
-	String query_result = allocate_bytes(&query_arena, line.size, 1);
+	String query_result = allocate_bytes(&arena, line.size, 1);
 	memcpy(query_result.data, line.data, line.size);
 	result.size += line.size;
       }
@@ -349,7 +348,6 @@ static String query(Node* node_root, String logs, Parameters parameters, I32 bin
     offset = offset->next;
     line_count++;
   }
-  query_arena.used = 0;
   return result;
 }
 
@@ -360,8 +358,6 @@ I32 main(I32 argc, char** argv) {
     print(ERROR "Expected exactly one argument, the path to the log file.\n");
     exit(EXIT_FAILURE);
   }
-
-  query_arena = make_arena(1ll << 32);
 
   char*  logs_path = argv[1];
   String logs      = read_file(logs_path);
