@@ -322,11 +322,10 @@ static String query(String logs, Parameters parameters, I32 bins, I32* histogram
 
   String result       = String(query_arena.memory, 0);
   I64    offset_index = lookup(node_root, parameters.query);
-  I64    offset_results = 0;
-  while (offset_index != 0) {
+  for (I64 line_count = 0; line_count < 256 && offset_index != 0; line_count++) {
     Offset offset = offsets[offset_index];
     // println(INFO "offset=", offset.value);
-    
+
     String line     = suffix(logs, offset.value);
     I64    line_end = find(line, '\n');
     line            = prefix(line, line_end + 1);
@@ -349,9 +348,8 @@ static String query(String logs, Parameters parameters, I32 bins, I32* histogram
     }
 
     offset_index = offset.next;
-    offset_results++;
   }
-  // println(INFO "offset_results=", offset_results);
+  query_arena.used = 0;
   return result;
 }
 
