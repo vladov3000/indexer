@@ -188,28 +188,22 @@ static Node* balance(Node* grandparent) {
   if (grandparent->is_black) {
     for (I64 parent_direction = 0; parent_direction < 2; parent_direction++) {
       Node* parent = grandparent->children[parent_direction];
-      if (parent != nullptr) {
-	if (!parent->is_black) {
-	  Node* child = parent->children[parent_direction];
-	  if (child != nullptr) {
-	    if (!child->is_black) {
-	      child->is_black                         = true;
-	      grandparent->children[parent_direction] = parent->children[1 - parent_direction];
-	      parent->children[1 - parent_direction]  = grandparent;
-	      return parent;
-	    }
-	  }
-	  Node* brother = parent->children[1 - parent_direction];
-	  if (brother != nullptr) {
-	    if (!brother->is_black) {
-	      parent->is_black                        = true;
-	      parent->children[1 - parent_direction]  = brother->children[parent_direction];
-	      grandparent->children[parent_direction] = brother->children[1 - parent_direction];
-	      brother->children[parent_direction]     = parent;
-	      brother->children[1 - parent_direction] = grandparent;
-	      return brother;
-	    }
-	  }
+      if (parent != nullptr && !parent->is_black) {
+	Node* child = parent->children[parent_direction];
+	if (child != nullptr && !child->is_black) {
+	  child->is_black                         = true;
+	  grandparent->children[parent_direction] = parent->children[1 - parent_direction];
+	  parent->children[1 - parent_direction]  = grandparent;
+	  return parent;
+	}
+	Node* brother = parent->children[1 - parent_direction];
+	if (brother != nullptr && !brother->is_black) {
+	  parent->is_black                        = true;
+	  parent->children[1 - parent_direction]  = brother->children[parent_direction];
+	  grandparent->children[parent_direction] = brother->children[1 - parent_direction];
+	  brother->children[parent_direction]     = parent;
+	  brother->children[1 - parent_direction] = grandparent;
+	  return brother;
 	}
       }
     }
@@ -217,18 +211,20 @@ static Node* balance(Node* grandparent) {
   return grandparent;
 }
 
-static Node* insert(Arena* arena, Node* node, String word, I64 offset) {
+static Node* insert(Arena* node_arena, Arena* word_arena, Node* node, String word, I64 offset) {
   if (node == nullptr) {
-    return make_node(arena, word, offset);
+    String new_word = allocate_bytes(word_arena, word.size, 1);
+    memcpy(new_word.data, word.data, word.size);
+    return make_node(node_arena, word, offset);
   }
   I32 comparison = compare(word, node->word);
   if (comparison < 0) {
-    node->children[0] = insert(arena, node->children[0], word, offset);
+    node->children[0] = insert(node_arena, word_arena, node->children[0], word, offset);
   } else if (comparison > 0) {
-    node->children[1] = insert(arena, node->children[1], word, offset);
+    node->children[1] = insert(node_arena, word_arena, node->children[1], word, offset);
   } else if (comparison == 0) {
     Offset* last      = node->last_offset;
-    last->next        = make_offset(arena, offset);
+    last->next        = make_offset(node_arena, offset);
     node->last_offset = last->next;
   }
   return balance(node);
@@ -250,6 +246,7 @@ static Offset* lookup(Node* node, String word) {
 
 static Node* index(String logs) {
   Arena node_arena = make_arena(1ll << 32);
+  Arena word_arena = make_arena(1ll << 32);
   Node* node_root  = nullptr;
   
   I64 line_start = 0;
@@ -263,7 +260,7 @@ static Node* index(String logs) {
 	  if (j == line.size || line[j] == ' ') {
 	    if (word_start != j) {
 	      String word         = slice(line, word_start, j);
-	      node_root           = insert(&node_arena, node_root, word, line_start);
+	      node_root           = insert(&node_arena, &word_arena, node_root, word, line_start);
 	      node_root->is_black = true;
 	    }
 	    word_start = j + 1;
@@ -274,7 +271,7 @@ static Node* index(String logs) {
 	    } else {
 	      String qouted_word = slice(line, last_qoute + 1, j);
 	      if (qouted_word.size > 0) {
-		node_root           = insert(&node_arena, node_root, qouted_word, line_start);
+		node_root           = insert(&node_arena, &word_arena, node_root, qouted_word, line_start);
 		node_root->is_black = true;
 	      }
 	      last_qoute = -1;
