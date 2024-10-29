@@ -262,13 +262,9 @@ static Node* index(String logs) {
 	for (I64 j = 0; j <= line.size; j++) {
 	  if (j == line.size || line[j] == ' ') {
 	    if (word_start != j) {
-	      String word               = slice(line, word_start, j);
-	      // println(INFO "word=", word);
+	      String word         = slice(line, word_start, j);
 	      node_root           = insert(&node_arena, node_root, word, line_start);
 	      node_root->is_black = true;
-	      // check_node(node_root);
-	      // println(INFO "Inserting word=\"", word, "\" tree_depth=", check_node(node_root), " node_count=", node_count - 1, '.');
-	      // print_tree(node_root, 0);
 	    }
 	    word_start = j + 1;
 	  }
@@ -307,7 +303,7 @@ static String query(Node* node_root, String logs, Parameters parameters, I32 bin
   const char* query_time_format = "%Y-%m-%dT%H:%M";
 
   // @Feature make this a parameter.
-  // const char* log_time_format = "%Y/%m/%d %H:%M:%S";
+  // const char* log_time_format = "%Y/%m/%d %H:%M:%S"; <-- format for slogs
   const char* log_time_format = "%Y-%m-%dT%H:%M:%S";
   
   time_t start_time = parse_time(parameters.start, query_time_format);
@@ -317,18 +313,17 @@ static String query(Node* node_root, String logs, Parameters parameters, I32 bin
   Offset* offset     = lookup(node_root, parameters.query);
   I64     line_count = 0;
   while (offset != nullptr) {
-    // println(INFO "offset=", offset.value);
-
     String line     = suffix(logs, offset->value);
     I64    line_end = find(line, '\n');
     line            = prefix(line, line_end + 1);
 
     time_t time = -1;
     for (I64 i = 0; time == -1 && i < line.size; i++) {
-      // println("suffix=", suffix(line, i), " format=", log_time_format);
       time = parse_time(suffix(line, i), log_time_format);
     }
-    assert(time != -1);
+    if (time == -1) {
+      print(WARN "Failed to parse time as ", log_time_format, " in this line: ", line);
+    }
     assert(contains(line, parameters.query));
     
     if (start_time <= time && time <= end_time) {
@@ -445,7 +440,6 @@ I32 main(I32 argc, char** argv) {
 	  if (bytes_written == -1) {
 	    println(ERROR "Failed to write to connection: ", get_error(), '.');
 	  }
-
 	} else {
 	  const char* file_path    = nullptr;
 	  String      content_type = {};
