@@ -115,45 +115,43 @@ struct Node {
   Node*   children[2];
 };
 
-/* @Debugging port this to use a Node*
-static void print_tree(I64 node_index, I64 indents) {
+static void print_tree(Node* node, I64 indents) {
   for (I64 i = 0; i < indents; i++) {
     print(' ');
   }
 
-  if (node_index == 0) {
+  if (node == nullptr) {
     println("nil");
   } else {
-    Node   node  = nodes[node_index];
-    String color = node.is_black == 0 ? "\x1b[31m" : "\x1b[30m\x1b[47m";
+    String color = node->is_black == 0 ? "\x1b[31m" : "\x1b[30m\x1b[47m";
     String clear = "\x1b[0m";
-    println(color, node.word, clear);
+    println(color, node->word, clear);
   
-    for (I64 i = 0; i < length(node.children); i++) {
-      print_tree(node.children[i], indents + 1);
+    for (I64 i = 0; i < length(node->children); i++) {
+      print_tree(node->children[i], indents + 1);
     }
   }
 }
 
-static I64 check_node(I64 node_index) {
-  if (node_index == 0) {
-    return 0;
+struct CheckResult {
+  I64 depth;
+  I64 count;
+};
+
+static CheckResult check_node(Node* node) {
+  if (node == nullptr) {
+    return (CheckResult) {};
   }
   
-  assert(0 < node_index && node_index < node_count);
-
-  Node node = nodes[node_index];
-  assert(node.word.size > 0);
-  // assert(0 < node.first_offset && node.first_offset < offset_count);
-  // assert(0 < node.last_offset  && node.last_offset  < offset_count);
+  assert(node->word.size > 0);
 
   I64 max_depth = 0;
   I64 min_depth = 0;
-  for (I64 i = 0; i < length(node.children); i++) {
-    I64 child_index = node.children[i];
-    if (child_index != 0) {
-      Node child      = nodes[child_index];
-      I32  comparison = compare(node.word, child.word);
+  I64 count     = 0;
+  for (I64 i = 0; i < length(node->children); i++) {
+    Node* child = node->children[i];
+    if (child != nullptr) {
+      I32  comparison = compare(node->word, child->word);
       if (i == 0) {
 	assert(comparison > 0);
       }
@@ -162,23 +160,21 @@ static I64 check_node(I64 node_index) {
       }
     }
     
-    I64 depth = check_node(child_index);
-    if (depth > max_depth) {
-      max_depth = depth;
+    CheckResult result = check_node(child);
+    if (result.depth > max_depth) {
+      max_depth = result.depth;
     }
-    if (min_depth == 0 || depth < min_depth) {
-      min_depth = depth;
+    if (min_depth == 0 || result.depth < min_depth) {
+      min_depth = result.depth;
     }
+    count += result.count;
   }
-  
-  I64 inbalance = abs(max_depth - min_depth);
-  if (inbalance > 1) {
-    //println(INFO "max_depth=", max_depth, " min_depth=", min_depth);
-  }
-  // assert(inbalance <= 1);
-  return max_depth + 1;
+
+  CheckResult result = {};
+  result.depth       = max_depth + 1;
+  result.count       = count + 1;
+  return result;
 }
-*/
 
 static Node* make_node(Arena* arena, String word, I64 value) {
   Node* node         = allocate<Node>(arena);
@@ -293,8 +289,9 @@ static Node* index(String logs) {
       line_start = i + 1;
     }
   }
-  //println(INFO "Built index with tree_depth=", check_node(node_root), " node_count=", node_count - 1, '.');
-  //flush();
+  CheckResult result = check_node(node_root);
+  println(INFO "Built index with tree_depth=", result.depth, " node_count=", result.count, '.');
+  flush();
   return node_root;
 }
 
