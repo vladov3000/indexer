@@ -279,6 +279,7 @@ static void index(String logs) {
       if (line_start != i) {
 	String line       = slice(logs, line_start, i);
 	I64    word_start = 0;
+	I64    last_qoute = -1;
 	for (I64 j = 0; j <= line.size; j++) {
 	  if (j == line.size || line[j] == ' ') {
 	    if (word_start != j) {
@@ -291,6 +292,18 @@ static void index(String logs) {
 	      // print_tree(node_root, 0);
 	    }
 	    word_start = j + 1;
+	  }
+	  if (j < line.size && line[j] == '"') {
+	    if (last_qoute == -1) {
+	      last_qoute = j;
+	    } else {
+	      String qouted_word = slice(line, last_qoute + 1, j);
+	      if (qouted_word.size > 0) {
+		node_root                 = insert(node_root, qouted_word, line_start);
+		nodes[node_root].is_black = true;
+	      }
+	      last_qoute = -1;
+	    }
 	  }
 	}
       }
@@ -322,7 +335,8 @@ static String query(String logs, Parameters parameters, I32 bins, I32* histogram
 
   String result       = String(query_arena.memory, 0);
   I64    offset_index = lookup(node_root, parameters.query);
-  for (I64 line_count = 0; line_count < 256 && offset_index != 0; line_count++) {
+  I64    line_count   = 0;
+  while (offset_index != 0) {
     Offset offset = offsets[offset_index];
     // println(INFO "offset=", offset.value);
 
@@ -339,15 +353,18 @@ static String query(String logs, Parameters parameters, I32 bins, I32* histogram
     assert(contains(line, parameters.query));
     
     if (start_time <= time && time <= end_time) {
-      String query_result = allocate_bytes(&query_arena, line.size, 1);
-      memcpy(query_result.data, line.data, line.size);
-      result.size += line.size;
+      if (line_count < 256) {
+	String query_result = allocate_bytes(&query_arena, line.size, 1);
+	memcpy(query_result.data, line.data, line.size);
+	result.size += line.size;
+      }
 
       F32 value = (F32) (time - start_time) / (end_time - start_time);
       histogram[(I32) (bins * value)]++;      
     }
 
     offset_index = offset.next;
+    line_count++;
   }
   query_arena.used = 0;
   return result;
@@ -370,7 +387,7 @@ I32 main(I32 argc, char** argv) {
   allocate<Node>(&node_arena);
 
   query_arena = make_arena(1ll << 32);
-  
+
   char*  logs_path = argv[1];
   String logs      = read_file(logs_path);
   println(INFO "Indexing ", logs_path, '.');
