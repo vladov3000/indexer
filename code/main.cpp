@@ -96,14 +96,19 @@ static Parameters parse_parameters(String input) {
   return parameters;
 }
 
+struct Range {
+  I64 start;
+  I64 size;
+};
+
 struct Offset {
-  I64     value;
+  Range   range;
   Offset* next;
 };
 
-static Offset* make_offset(Arena* arena, I64 value) {
+static Offset* make_offset(Arena* arena, Range range) {
   Offset* offset = allocate<Offset>(arena);
-  offset->value  = value;
+  offset->range  = range;
   return offset;
 }
 
@@ -176,10 +181,10 @@ static CheckResult check_node(Node* node) {
   return result;
 }
 
-static Node* make_node(Arena* arena, String word, I64 value) {
+static Node* make_node(Arena* arena, String word, Range range) {
   Node* node         = allocate<Node>(arena);
   node->word         = word;
-  node->first_offset = make_offset(arena, value);
+  node->first_offset = make_offset(arena, range);
   node->last_offset  = node->first_offset;
   return node;
 }
@@ -211,20 +216,20 @@ static Node* balance(Node* grandparent) {
   return grandparent;
 }
 
-static Node* insert(Arena* node_arena, Arena* word_arena, Node* node, String word, I64 offset) {
+static Node* insert(Arena* node_arena, Arena* word_arena, Node* node, String word, Range range) {
   if (node == nullptr) {
     String new_word = allocate_bytes(word_arena, word.size, 1);
     memcpy(new_word.data, word.data, word.size);
-    return make_node(node_arena, word, offset);
+    return make_node(node_arena, word, range);
   }
   I32 comparison = compare(word, node->word);
   if (comparison < 0) {
-    node->children[0] = insert(node_arena, word_arena, node->children[0], word, offset);
+    node->children[0] = insert(node_arena, word_arena, node->children[0], word, range);
   } else if (comparison > 0) {
-    node->children[1] = insert(node_arena, word_arena, node->children[1], word, offset);
+    node->children[1] = insert(node_arena, word_arena, node->children[1], word, range);
   } else if (comparison == 0) {
     Offset* last      = node->last_offset;
-    last->next        = make_offset(node_arena, offset);
+    last->next        = make_offset(node_arena, range);
     node->last_offset = last->next;
   }
   return balance(node);
@@ -260,7 +265,8 @@ static Node* index(String logs) {
 	  if (j == line.size || line[j] == ' ') {
 	    if (word_start != j) {
 	      String word         = slice(line, word_start, j);
-	      node_root           = insert(&node_arena, &word_arena, node_root, word, line_start);
+	      Range  range        = { line_start, line.size };
+	      node_root           = insert(&node_arena, &word_arena, node_root, word, range);
 	      node_root->is_black = true;
 	    }
 	    word_start = j + 1;
@@ -271,7 +277,8 @@ static Node* index(String logs) {
 	    } else {
 	      String qouted_word = slice(line, last_qoute + 1, j);
 	      if (qouted_word.size > 0) {
-		node_root           = insert(&node_arena, &word_arena, node_root, qouted_word, line_start);
+		Range  range        = { line_start, line.size };
+		node_root           = insert(&node_arena, &word_arena, node_root, qouted_word, range);
 		node_root->is_black = true;
 	      }
 	      last_qoute = -1;
@@ -294,9 +301,9 @@ static time_t parse_time(String input, const char* format) {
   return result == NULL ? -1 : mktime(&time);
 }
 
-static String query(Node* node_root, String logs, Parameters parameters, I32 bins, I32* histogram) {
-  Arena arena = make_arena(1ll << 32);
-  
+static String query(
+  Arena* arena, Node* node_root, String logs, Parameters parameters, I32 bins, I32* histogram
+) {
   const char* query_time_format = "%Y-%m-%dT%H:%M";
 
   // @Feature make this a parameter.
@@ -306,11 +313,11 @@ static String query(Node* node_root, String logs, Parameters parameters, I32 bin
   time_t start_time = parse_time(parameters.start, query_time_format);
   time_t end_time   = parse_time(parameters.end, query_time_format);
 
-  String  result     = String(arena.memory, 0);
+  String  result     = String(arena->memory, 0);
   Offset* offset     = lookup(node_root, parameters.query);
   I64     line_count = 0;
   while (offset != nullptr && line_count < 256) {
-    String line     = suffix(logs, offset->value);
+    String line     = suffix(logs, offset->range.start);
     I64    line_end = find(line, '\n');
     line            = prefix(line, line_end + 1);
 
@@ -325,7 +332,7 @@ static String query(Node* node_root, String logs, Parameters parameters, I32 bin
     
     if (start_time <= time && time <= end_time) {
       if (line_count < 256) {
-	String query_result = allocate_bytes(&arena, line.size, 1);
+	String query_result = allocate_bytes(arena, line.size, 1);
 	memcpy(query_result.data, line.data, line.size);
 	result.size += line.size;
       }
@@ -337,6 +344,7 @@ static String query(Node* node_root, String logs, Parameters parameters, I32 bin
     offset = offset->next;
     line_count++;
   }
+
   return result;
 }
 
@@ -389,6 +397,8 @@ I32 main(I32 argc, char** argv) {
   println(INFO "Listening on port ", port, '.');
   flush();
 
+  Arena query_arena = make_arena(1ll << 32);
+
   while (true) {
     struct sockaddr_in client_address = {};
     I32                connection_fd  = accept(listen_fd, &client_address);
@@ -419,7 +429,8 @@ I32 main(I32 argc, char** argv) {
 	  I32 histogram[100] = {};
 	  I32 bins           = length(histogram);
 
-	  String filtered_logs = query(node_root, logs, parameters, bins, histogram);
+	  String filtered_logs = query(&query_arena, node_root, logs, parameters, bins, histogram);
+	  query_arena.used     = 0;
 
 	  I64 content_length = sizeof(bins) + sizeof(histogram) + filtered_logs.size;
 	  U8  storage[20]    = {};
