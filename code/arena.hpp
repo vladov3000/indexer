@@ -32,6 +32,11 @@ static T* allocate(Arena* arena) {
   return (T*) allocate_bytes(arena, sizeof(T), alignof(T)).data;
 }
 
+template <typename T>
+static T* allocate_array(Arena* arena, I64 count) {
+  return (T*) allocate_bytes(arena, sizeof(T) * count, alignof(T)).data;
+}
+
 static void destroy(Arena* arena) {
   assert(munmap(arena->memory, arena->size) == 0);
 }
