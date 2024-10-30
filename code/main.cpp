@@ -60,7 +60,13 @@ static String read_file(const char* path) {
     println(ERROR "Failed to mmap \"", path, "\": ", get_error(), '.');
     exit(EXIT_FAILURE);
   }
+
+  assert(close(fd) == 0);
   return result;
+}
+
+static void close_file(String text) {
+  assert(munmap(text.data, text.size) == 0);
 }
 
 struct Parameters {
@@ -302,8 +308,9 @@ static time_t parse_time(String input, const char* format) {
 }
 
 static String query(
-  Arena* arena, Node* node_root, String logs, Parameters parameters, I32 bins, I32* histogram
+  Arena* arena, Node* node_root, const char* logs_path, Parameters parameters, I32 bins, I32* histogram
 ) {
+  
   const char* query_time_format = "%Y-%m-%dT%H:%M";
 
   // @Feature make this a parameter.
@@ -313,6 +320,7 @@ static String query(
   time_t start_time = parse_time(parameters.start, query_time_format);
   time_t end_time   = parse_time(parameters.end, query_time_format);
 
+  String  logs       = read_file(logs_path);
   String  result     = String(arena->memory, 0);
   Offset* offset     = lookup(node_root, parameters.query);
   I64     line_count = 0;
@@ -345,6 +353,7 @@ static String query(
     line_count++;
   }
 
+  close_file(logs);
   return result;
 }
 
@@ -361,6 +370,7 @@ I32 main(I32 argc, char** argv) {
   println(INFO "Indexing ", logs_path, '.');
   flush();
   Node* node_root = index(logs);
+  close_file(logs);
   
   I64 port = 2000;
   
@@ -429,7 +439,7 @@ I32 main(I32 argc, char** argv) {
 	  I32 histogram[100] = {};
 	  I32 bins           = length(histogram);
 
-	  String filtered_logs = query(&query_arena, node_root, logs, parameters, bins, histogram);
+	  String filtered_logs = query(&query_arena, node_root, logs_path, parameters, bins, histogram);
 	  query_arena.used     = 0;
 
 	  I64 content_length = sizeof(bins) + sizeof(histogram) + filtered_logs.size;
