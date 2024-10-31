@@ -40,3 +40,20 @@ static T* allocate_array(Arena* arena, I64 count) {
 static void destroy(Arena* arena) {
   assert(munmap(arena->memory, arena->size) == 0);
 }
+
+static I64 save(Arena* arena) {
+  return arena->used;
+}
+
+static void restore(Arena* arena, I64 saved) {
+  arena->used = saved;
+}
+
+static String concatonate_paths(Arena* arena, String a, String b) {
+  String result = allocate_bytes(arena, a.size + b.size + 2, 1);
+  memcpy(result.data, a.data, a.size);
+  result.data[a.size] = '/';
+  memcpy(&result.data[a.size + 1], b.data, b.size);
+  result.data[result.size - 1] = 0;
+  return result;
+}

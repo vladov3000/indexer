@@ -20,15 +20,15 @@ function setDate(input, date) {
 }
 
 async function onQueryClick() {
-    /*
     const query     = document.getElementById("queryInput").value;
     const startTime = document.getElementById("startTime").value;
     const endTime   = document.getElementById("endTime").value;
-    */
 
+    /*
     const query     = "INFO";
     const startTime = "2024-10-08T00:00";
     const endTime   = "2024-10-10T00:00";
+    */
 
     const response  = await fetch(`/api/query?query=${query}&start=${startTime}&end=${endTime}`);
     const body      = await response.arrayBuffer();

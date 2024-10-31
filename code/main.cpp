@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <assert.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -226,7 +227,7 @@ static Node* insert(Arena* node_arena, Arena* word_arena, Node* node, String wor
   if (node == nullptr) {
     String new_word = allocate_bytes(word_arena, word.size, 1);
     memcpy(new_word.data, word.data, word.size);
-    return make_node(node_arena, word, range);
+    return make_node(node_arena, new_word, range);
   }
   I32 comparison = compare(word, node->word);
   if (comparison < 0) {
@@ -255,11 +256,7 @@ static Offset* lookup(Node* node, String word) {
   }
 }
 
-static Node* index(String logs) {
-  Arena node_arena = make_arena(1ll << 32);
-  Arena word_arena = make_arena(1ll << 32);
-  Node* node_root  = nullptr;
-  
+static Node* index_logs(Arena* node_arena, Arena* word_arena, String logs, Node* node_root) {
   I64 line_start = 0;
   for (I64 i = 0; i <= logs.size; i++) {
     if (i == logs.size || logs[i] == '\n') {
@@ -272,7 +269,7 @@ static Node* index(String logs) {
 	    if (word_start != j) {
 	      String word         = slice(line, word_start, j);
 	      Range  range        = { line_start, line.size };
-	      node_root           = insert(&node_arena, &word_arena, node_root, word, range);
+	      node_root           = insert(node_arena, word_arena, node_root, word, range);
 	      node_root->is_black = true;
 	    }
 	    word_start = j + 1;
@@ -284,7 +281,7 @@ static Node* index(String logs) {
 	      String qouted_word = slice(line, last_qoute + 1, j);
 	      if (qouted_word.size > 0) {
 		Range  range        = { line_start, line.size };
-		node_root           = insert(&node_arena, &word_arena, node_root, qouted_word, range);
+		node_root           = insert(node_arena, word_arena, node_root, qouted_word, range);
 		node_root->is_black = true;
 	      }
 	      last_qoute = -1;
@@ -310,7 +307,6 @@ static time_t parse_time(String input, const char* format) {
 static String query(
   Arena* arena, Node* node_root, const char* logs_path, Parameters parameters, I32 bins, I32* histogram
 ) {
-  
   const char* query_time_format = "%Y-%m-%dT%H:%M";
 
   // @Feature make this a parameter.
@@ -321,10 +317,10 @@ static String query(
   time_t end_time   = parse_time(parameters.end, query_time_format);
 
   String  logs       = read_file(logs_path);
-  String  result     = String(arena->memory, 0);
+  String  result     = allocate_bytes(arena, 0, 1);
   Offset* offset     = lookup(node_root, parameters.query);
   I64     line_count = 0;
-  while (offset != nullptr && line_count < 256) {
+  while (offset != nullptr) {
     String line     = suffix(logs, offset->range.start);
     I64    line_end = find(line, '\n');
     line            = prefix(line, line_end + 1);
@@ -339,11 +335,9 @@ static String query(
     assert(contains(line, parameters.query));
     
     if (start_time <= time && time <= end_time) {
-      if (line_count < 256) {
-	String query_result = allocate_bytes(arena, line.size, 1);
-	memcpy(query_result.data, line.data, line.size);
-	result.size += line.size;
-      }
+      String query_result = allocate_bytes(arena, line.size, 1);
+      memcpy(query_result.data, line.data, line.size);
+      result.size += line.size;
 
       F32 value = (F32) (time - start_time) / (end_time - start_time);
       histogram[(I32) (bins * value)]++;      
@@ -357,20 +351,86 @@ static String query(
   return result;
 }
 
+struct Index {
+  String path;
+  Node*  root;
+  Index* next;
+};
+
 I32 main(I32 argc, char** argv) {
   atexit(flush);
 
+  Arena arenas[3] = {};
+  for (I64 i = 0; i < length(arenas); i++) {
+    arenas[i] = make_arena(1ll << 34);
+  }
+
+  Arena* index_arena = &arenas[0];
+  Arena* node_arena  = &arenas[1];
+  Arena* word_arena  = &arenas[2];
+  Arena* query_arena = &arenas[1];
+  
   if (argc != 2) {
     print(ERROR "Expected exactly one argument, the path to the log file.\n");
     exit(EXIT_FAILURE);
   }
 
-  char*  logs_path = argv[1];
-  String logs      = read_file(logs_path);
-  println(INFO "Indexing ", logs_path, '.');
-  flush();
-  Node* node_root = index(logs);
-  close_file(logs);
+  char*       logs_path = argv[1];
+  struct stat info      = {};
+  if (stat(logs_path, &info)) {
+    println(ERROR "Failed to stat \"", logs_path, "\": ", get_error(), '.');
+    exit(EXIT_FAILURE);    
+  }
+
+  Index* index = nullptr;
+
+  if (S_ISREG(info.st_mode)) {
+    println(INFO "Indexing ", logs_path, '.');
+    flush();
+
+    String logs = read_file(logs_path);
+    Node*  root = index_logs(node_arena, word_arena, logs, nullptr);
+    close_file(logs);
+
+    index       = allocate<Index>(index_arena);
+    index->path = logs_path;
+    index->root = root;
+  }
+
+  if (S_ISDIR(info.st_mode)) {
+    DIR* dir = opendir(logs_path);
+    assert(dir != NULL);
+
+    while (true) {
+      dirent* entry = readdir(dir);
+      if (entry == NULL) {
+	break;
+      }
+
+      String log_path = entry->d_name;
+      if (log_path == "." || log_path == "..") {
+	continue;
+      }
+
+      log_path = concatonate_paths(index_arena, logs_path, log_path);
+      
+      println(INFO "Indexing \"", log_path, "\".");
+      flush();
+      
+      String logs = read_file((char*) log_path.data);
+      Node*  root = index_logs(node_arena, word_arena, logs, nullptr);
+
+      Index* new_index = allocate<Index>(index_arena);
+      new_index->path  = log_path;
+      new_index->root  = root;
+      new_index->next  = index;
+      index            = new_index;
+      
+      close_file(logs);
+    }
+    
+    assert(closedir(dir) == 0);
+  }
   
   I64 port = 2000;
   
@@ -407,8 +467,6 @@ I32 main(I32 argc, char** argv) {
   println(INFO "Listening on port ", port, '.');
   flush();
 
-  Arena query_arena = make_arena(1ll << 32);
-
   while (true) {
     struct sockaddr_in client_address = {};
     I32                connection_fd  = accept(listen_fd, &client_address);
@@ -439,8 +497,11 @@ I32 main(I32 argc, char** argv) {
 	  I32 histogram[100] = {};
 	  I32 bins           = length(histogram);
 
-	  String filtered_logs = query(&query_arena, node_root, logs_path, parameters, bins, histogram);
-	  query_arena.used     = 0;
+	  String filtered_logs = allocate_bytes(query_arena, 0, 1);
+	  for (Index* i = index; i != nullptr; i = i->next) {
+	    char* log_path = (char*) i->path.data;
+	    filtered_logs.size += query(query_arena, i->root, log_path, parameters, bins, histogram).size;
+	  }
 
 	  I64 content_length = sizeof(bins) + sizeof(histogram) + filtered_logs.size;
 	  U8  storage[20]    = {};
@@ -458,6 +519,8 @@ I32 main(I32 argc, char** argv) {
 	  if (bytes_written == -1) {
 	    println(ERROR "Failed to write to connection: ", get_error(), '.');
 	  }
+
+	  // query_arena->used = 0;
 	} else {
 	  const char* file_path    = nullptr;
 	  String      content_type = {};
