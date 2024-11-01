@@ -96,11 +96,11 @@ static void parse_parameter(String* input, Parameters* parameters) {
 	String rest   = suffix(value, escape + 3);
 	if (rest.size > 0) {
 	  memmove(&value[escape + 1], rest.data, rest.size);
-	  value.size -= rest.size;
+	  value.size -= 2;
 	}
       }
     }
-    i = escape + 1;
+    i = escape;
   }
   
   if (key == "query") {
@@ -324,21 +324,27 @@ struct Index {
 
 struct Query {
   String value;
+  Query* child;
   Query* next;
 };
 
 static Query* parse_query(Arena* arena, String query) {
-  Query* root = nullptr;
+  Query* root    = allocate<Query>(arena);
+  Query* current = root;
   for (I64 i = 0; i < query.size; i++) {
     I64    word_end = find(query, ' ', i);
     String word     = slice(query, i, word_end);
     i               = word_end;
 
-    if (word.size > 0) {
-      Query* query = allocate<Query>(arena);
-      query->value = word;
-      query->next  = root;
-      root         = query;
+    if (word == "OR") {
+      Query* next   = allocate<Query>(arena);
+      current->next = next;
+      current       = next;
+    } else if (word.size > 0) {
+      Query* query   = allocate<Query>(arena);
+      query->value   = word;
+      query->next    = current->child;
+      current->child = query;
     }
   }
   return root;
@@ -360,71 +366,71 @@ static String query(
 
   I64 saved = save(offset_arena);
 
-  Query*  query      = parse_query(offset_arena, parameters.query);
-  bool    first_word = true;
-  Offset* offsets    = nullptr;  
-  
-  for (Query* subquery = query; subquery != nullptr; subquery = subquery->next) {
-    String  word        = subquery->value;
-    Offset* new_offsets = lookup(index->root, word);
-    if (first_word) {
-      offsets    = new_offsets;
-      first_word = false;
-    } else {
-      Offset* previous = nullptr;
-      for (Offset* i = offsets; i != nullptr; i = i->next) {
-	bool found = false;
-	for (Offset* j = new_offsets; j != nullptr; j = j->next) {
-	  if (i->value == j->value) {
-	    found = true;
-	    break;
+  Query* query  = parse_query(offset_arena, parameters.query);
+  String logs   = read_file((char*) index->path.data);
+  String result = allocate_bytes(query_arena, 0, 1);
+
+  for (Query* or_query = query; or_query != nullptr; or_query = or_query->next) {
+    Offset* offsets    = nullptr;
+    bool    first_word = true;
+    
+    for (Query* and_query = or_query->child; and_query != nullptr; and_query = and_query->next) {
+      String  word        = and_query->value;
+      Offset* new_offsets = lookup(index->root, word);
+      if (first_word) {
+	offsets    = new_offsets;
+	first_word = false;
+      } else {
+	Offset* previous = nullptr;
+	for (Offset* i = offsets; i != nullptr; i = i->next) {
+	  bool found = false;
+	  for (Offset* j = new_offsets; j != nullptr; j = j->next) {
+	    if (i->value == j->value) {
+	      found = true;
+	      break;
+	    }
 	  }
-	}
-	if (!found) {
-	  if (previous == nullptr) {
-	    if (offsets != nullptr) {
-	      offsets = offsets->next;
+	  if (!found) {
+	    if (previous == nullptr) {
+	      if (offsets != nullptr) {
+		offsets = offsets->next;
+	      }
+	    } else {
+	      previous->next = previous->next->next;
 	    }
 	  } else {
-	    previous->next = previous->next->next;
+	    previous = i;
 	  }
-	} else {
-	  previous = i;
 	}
       }
     }
-  }
 
-  String  logs       = read_file((char*) index->path.data);
-  String  result     = allocate_bytes(query_arena, 0, 1);
-  Offset* offset     = offsets;
-  I64     line_count = 0;
-  while (offset != nullptr) {
-    String line     = suffix(logs, offset->value);
-    I64    line_end = find(line, '\n');
-    line            = prefix(line, line_end + 1);
+    Offset* offset = offsets;
+    while (offset != nullptr) {
+      String line     = suffix(logs, offset->value);
+      I64    line_end = find(line, '\n');
+      line            = prefix(line, line_end + 1);
 
-    time_t time = -1;
-    for (I64 i = 0; time == -1 && i < line.size; i++) {
-      time = parse_time(suffix(line, i), log_time_format);
-    }
-    if (time == -1) {
-      print(WARN "Failed to parse time as ", log_time_format, " in this line: ", line);
-    }
+      time_t time = -1;
+      for (I64 i = 0; time == -1 && i < line.size; i++) {
+	time = parse_time(suffix(line, i), log_time_format);
+      }
+      if (time == -1) {
+	print(WARN "Failed to parse time as ", log_time_format, " in this line: ", line);
+      }
     
-    if (start_time <= time && time <= end_time) {
-      String query_result = allocate_bytes(query_arena, line.size, 1);
-      memcpy(query_result.data, line.data, line.size);
-      result.size += line.size;
+      if (start_time <= time && time <= end_time) {
+	String query_result = allocate_bytes(query_arena, line.size, 1);
+	memcpy(query_result.data, line.data, line.size);
+	result.size += line.size;
 
-      F32 value = (F32) (time - start_time) / (end_time - start_time);
-      histogram[(I32) (bins * value)]++;      
+	F32 value = (F32) (time - start_time) / (end_time - start_time);
+	histogram[(I32) (bins * value)]++;      
+      }
+
+      offset = offset->next;
     }
-
-    offset = offset->next;
-    line_count++;
   }
-
   close_file(logs);
   restore(offset_arena, saved);
   return result;
