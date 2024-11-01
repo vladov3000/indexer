@@ -11,7 +11,7 @@ function load() {
     const endTime = document.getElementById("endTime");
     setDate(endTime, new Date());
 
-    onQueryClick();
+    // onQueryClick();
 }
 
 function setDate(input, date) {
@@ -43,6 +43,8 @@ async function onQueryClick() {
 
     const results = document.createElement("div");
     results.setAttribute("id", "results");
+    document.body.appendChild(results);    
+    
     for (let line of logs.split("\n")) {
 	if (line.length > 0) {
 	    for (const word of query.split(' ')) {
@@ -53,7 +55,6 @@ async function onQueryClick() {
 	    results.appendChild(result);
 	}
     }
-    document.body.appendChild(results);    
 }
 
 function drawGraph(values) {
