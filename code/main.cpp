@@ -122,19 +122,14 @@ static Parameters parse_parameters(String input) {
   return parameters;
 }
 
-struct Range {
-  I64 start;
-  I64 size;
-};
-
 struct Offset {
-  Range   range;
+  I64     value;
   Offset* next;
 };
 
-static Offset* make_offset(Arena* arena, Range range) {
+static Offset* make_offset(Arena* arena, I64 value) {
   Offset* offset = allocate<Offset>(arena);
-  offset->range  = range;
+  offset->value  = value;
   return offset;
 }
 
@@ -207,10 +202,10 @@ static CheckResult check_node(Node* node) {
   return result;
 }
 
-static Node* make_node(Arena* arena, String word, Range range) {
+static Node* make_node(Arena* arena, String word, I64 offset) {
   Node* node         = allocate<Node>(arena);
   node->word         = word;
-  node->first_offset = make_offset(arena, range);
+  node->first_offset = make_offset(arena, offset);
   node->last_offset  = node->first_offset;
   return node;
 }
@@ -242,20 +237,20 @@ static Node* balance(Node* grandparent) {
   return grandparent;
 }
 
-static Node* insert(Arena* node_arena, Arena* word_arena, Node* node, String word, Range range) {
+static Node* insert(Arena* node_arena, Arena* word_arena, Node* node, String word, I64 offset) {
   if (node == nullptr) {
     String new_word = allocate_bytes(word_arena, word.size, 1);
     memcpy(new_word.data, word.data, word.size);
-    return make_node(node_arena, new_word, range);
+    return make_node(node_arena, new_word, offset);
   }
   I32 comparison = compare(word, node->word);
   if (comparison < 0) {
-    node->children[0] = insert(node_arena, word_arena, node->children[0], word, range);
+    node->children[0] = insert(node_arena, word_arena, node->children[0], word, offset);
   } else if (comparison > 0) {
-    node->children[1] = insert(node_arena, word_arena, node->children[1], word, range);
+    node->children[1] = insert(node_arena, word_arena, node->children[1], word, offset);
   } else if (comparison == 0) {
     Offset* last      = node->last_offset;
-    last->next        = make_offset(node_arena, range);
+    last->next        = make_offset(node_arena, offset);
     node->last_offset = last->next;
   }
   return balance(node);
@@ -287,8 +282,7 @@ static Node* index_logs(Arena* node_arena, Arena* word_arena, String logs, Node*
 	  if (j == line.size || line[j] == ' ') {
 	    if (word_start != j) {
 	      String word         = slice(line, word_start, j);
-	      Range  range        = { line_start, line.size };
-	      node_root           = insert(node_arena, word_arena, node_root, word, range);
+	      node_root           = insert(node_arena, word_arena, node_root, word, line_start);
 	      node_root->is_black = true;
 	    }
 	    word_start = j + 1;
@@ -299,8 +293,7 @@ static Node* index_logs(Arena* node_arena, Arena* word_arena, String logs, Node*
 	    } else {
 	      String qouted_word = slice(line, last_qoute + 1, j);
 	      if (qouted_word.size > 0) {
-		Range  range        = { line_start, line.size };
-		node_root           = insert(node_arena, word_arena, node_root, qouted_word, range);
+		node_root           = insert(node_arena, word_arena, node_root, qouted_word, line_start);
 		node_root->is_black = true;
 	      }
 	      last_qoute = -1;
@@ -359,7 +352,7 @@ static String query(
       for (Offset* i = offsets; i != nullptr; i = i->next) {
 	bool found = false;
 	for (Offset* j = new_offsets; j != nullptr; j = j->next) {
-	  if (i->range.start == j->range.start) {
+	  if (i->value == j->value) {
 	    found = true;
 	    break;
 	  }
@@ -385,7 +378,7 @@ static String query(
   Offset* offset     = offsets;
   I64     line_count = 0;
   while (offset != nullptr) {
-    String line     = suffix(logs, offset->range.start);
+    String line     = suffix(logs, offset->value);
     I64    line_end = find(line, '\n');
     line            = prefix(line, line_end + 1);
 
