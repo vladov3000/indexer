@@ -322,6 +322,28 @@ struct Index {
   Index* next;
 };
 
+struct Query {
+  String value;
+  Query* next;
+};
+
+static Query* parse_query(Arena* arena, String query) {
+  Query* root = nullptr;
+  for (I64 i = 0; i < query.size; i++) {
+    I64    word_end = find(query, ' ', i);
+    String word     = slice(query, i, word_end);
+    i               = word_end;
+
+    if (word.size > 0) {
+      Query* query = allocate<Query>(arena);
+      query->value = word;
+      query->next  = root;
+      root         = query;
+    }
+  }
+  return root;
+}
+
 static String query(
   Arena*     offset_arena,
   Arena*     query_arena,
@@ -336,13 +358,14 @@ static String query(
   time_t start_time = parse_time(parameters.start, query_time_format);
   time_t end_time   = parse_time(parameters.end, query_time_format);
 
-  I64     saved      = save(offset_arena);
-  String  query      = parameters.query;
+  I64 saved = save(offset_arena);
+
+  Query*  query      = parse_query(offset_arena, parameters.query);
   bool    first_word = true;
-  Offset* offsets    = nullptr;
-  for (I64 i = 0; i < query.size; i++) {
-    I64     word_end    = find(query, ' ', i);
-    String  word        = slice(query, i, word_end);
+  Offset* offsets    = nullptr;  
+  
+  for (Query* subquery = query; subquery != nullptr; subquery = subquery->next) {
+    String  word        = subquery->value;
     Offset* new_offsets = lookup(index->root, word);
     if (first_word) {
       offsets    = new_offsets;
@@ -370,7 +393,6 @@ static String query(
 	}
       }
     }
-    i = word_end;
   }
 
   String  logs       = read_file((char*) index->path.data);
