@@ -304,21 +304,28 @@ static time_t parse_time(String input, const char* format) {
   return result == NULL ? -1 : mktime(&time);
 }
 
+struct Index {
+  String path;
+  Node*  root;
+  Index* next;
+};
+
 static String query(
-  Arena* arena, Node* node_root, const char* logs_path, Parameters parameters, I32 bins, I32* histogram
+  Arena*     arena,
+  char*      log_time_format,
+  Index*     index,
+  Parameters parameters,
+  I32        bins,
+  I32*       histogram
 ) {
   const char* query_time_format = "%Y-%m-%dT%H:%M";
-
-  // @Feature make this a parameter.
-  // const char* log_time_format = "%Y/%m/%d %H:%M:%S"; <-- format for slogs
-  const char* log_time_format = "%Y-%m-%dT%H:%M:%S";
   
   time_t start_time = parse_time(parameters.start, query_time_format);
   time_t end_time   = parse_time(parameters.end, query_time_format);
 
-  String  logs       = read_file(logs_path);
+  String  logs       = read_file((char*) index->path.data);
   String  result     = allocate_bytes(arena, 0, 1);
-  Offset* offset     = lookup(node_root, parameters.query);
+  Offset* offset     = lookup(index->root, parameters.query);
   I64     line_count = 0;
   while (offset != nullptr) {
     String line     = suffix(logs, offset->range.start);
@@ -351,12 +358,6 @@ static String query(
   return result;
 }
 
-struct Index {
-  String path;
-  Node*  root;
-  Index* next;
-};
-
 I32 main(I32 argc, char** argv) {
   atexit(flush);
 
@@ -370,13 +371,15 @@ I32 main(I32 argc, char** argv) {
   Arena* word_arena  = &arenas[2];
   Arena* query_arena = &arenas[1];
   
-  if (argc != 2) {
-    print(ERROR "Expected exactly one argument, the path to the log file.\n");
+  if (argc != 3) {
+    println(ERROR "Expected exactly two arguments, the time format and the path to the log file.");
+    println("Usage: indexer TIME_FORMAT LOGS_PATH");
     exit(EXIT_FAILURE);
   }
 
-  char*       logs_path = argv[1];
-  struct stat info      = {};
+  char*       time_format = argv[1];
+  char*       logs_path   = argv[2];
+  struct stat info        = {};
   if (stat(logs_path, &info)) {
     println(ERROR "Failed to stat \"", logs_path, "\": ", get_error(), '.');
     exit(EXIT_FAILURE);    
@@ -499,8 +502,7 @@ I32 main(I32 argc, char** argv) {
 
 	  String filtered_logs = allocate_bytes(query_arena, 0, 1);
 	  for (Index* i = index; i != nullptr; i = i->next) {
-	    char* log_path = (char*) i->path.data;
-	    filtered_logs.size += query(query_arena, i->root, log_path, parameters, bins, histogram).size;
+	    filtered_logs.size += query(query_arena, time_format, i, parameters, bins, histogram).size;
 	  }
 
 	  I64 content_length = sizeof(bins) + sizeof(histogram) + filtered_logs.size;
