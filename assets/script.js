@@ -48,7 +48,9 @@ async function onQueryClick() {
     for (let line of logs.split("\n")) {
 	if (line.length > 0) {
 	    for (const word of query.split(' ')) {
-		line = line.replaceAll(word, `<span class=\"found\">${word}</span>`);
+		if (word !== "OR") {
+		    line = line.replaceAll(word, `<span class=\"found\">${word}</span>`);
+		}
 	    }
 	    const result     = document.createElement("p");
 	    result.innerHTML = line;
