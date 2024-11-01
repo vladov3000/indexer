@@ -423,10 +423,11 @@ I32 main(I32 argc, char** argv) {
     arenas[i] = make_arena(1ll << 34);
   }
 
-  Arena* index_arena = &arenas[0];
-  Arena* node_arena  = &arenas[1];
-  Arena* word_arena  = &arenas[2];
-  Arena* query_arena = &arenas[1];
+  Arena* index_arena  = &arenas[0];
+  Arena* node_arena   = &arenas[1];
+  Arena* word_arena   = &arenas[2];
+  Arena* offset_arena = &arenas[0];
+  Arena* query_arena  = &arenas[1];
   
   if (argc != 3) {
     println(ERROR "Expected exactly two arguments, the time format and the path to the log file.");
@@ -560,7 +561,7 @@ I32 main(I32 argc, char** argv) {
 	  String filtered_logs = allocate_bytes(query_arena, 0, 1);
 	  for (Index* i = index; i != nullptr; i = i->next) {
 	    String result = query(
-	      node_arena, query_arena, time_format, i, parameters, bins, histogram
+	      offset_arena, query_arena, time_format, i, parameters, bins, histogram
 	    );
 	    filtered_logs.size += result.size;
 	  }
