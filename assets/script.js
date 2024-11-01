@@ -43,10 +43,13 @@ async function onQueryClick() {
 
     const results = document.createElement("div");
     results.setAttribute("id", "results");
-    for (const line of logs.split("\n")) {
+    for (let line of logs.split("\n")) {
 	if (line.length > 0) {
+	    for (const word of query.split(' ')) {
+		line = line.replaceAll(word, `<span class=\"found\">${word}</span>`);
+	    }
 	    const result     = document.createElement("p");
-	    result.innerHTML = line.replaceAll(query, `<span class=\"found\">${query}</span>`);
+	    result.innerHTML = line;
 	    results.appendChild(result);
 	}
     }

@@ -84,6 +84,25 @@ static void parse_parameter(String* input, Parameters* parameters) {
   I64    equals    = find(pair, '=');
   String key       = prefix(pair, equals);
   String value     = suffix(pair, equals + 1);
+  
+  for (I64 i = 0; i < value.size; i++) {
+    I64    escape = find(value, '%', i);
+    String digits = slice(value, escape + 1, escape + 3);
+    if (digits.size == 2) {
+      U8 first  = to_lower(digits[0]);
+      U8 second = to_lower(digits[1]);
+      if (is_hex(first) && is_hex(second)) {
+	value[escape] = (from_hex(first) << 4) + from_hex(second);
+	String rest   = suffix(value, escape + 3);
+	if (rest.size > 0) {
+	  memmove(&value[escape + 1], rest.data, rest.size);
+	  value.size -= rest.size;
+	}
+      }
+    }
+    i = escape + 1;
+  }
+  
   if (key == "query") {
     parameters->query = value;
   }
@@ -311,7 +330,8 @@ struct Index {
 };
 
 static String query(
-  Arena*     arena,
+  Arena*     offset_arena,
+  Arena*     query_arena,
   char*      log_time_format,
   Index*     index,
   Parameters parameters,
@@ -323,9 +343,46 @@ static String query(
   time_t start_time = parse_time(parameters.start, query_time_format);
   time_t end_time   = parse_time(parameters.end, query_time_format);
 
+  I64     saved      = save(offset_arena);
+  String  query      = parameters.query;
+  bool    first_word = true;
+  Offset* offsets    = nullptr;
+  for (I64 i = 0; i < query.size; i++) {
+    I64     word_end    = find(query, ' ', i);
+    String  word        = slice(query, i, word_end);
+    Offset* new_offsets = lookup(index->root, word);
+    if (first_word) {
+      offsets    = new_offsets;
+      first_word = false;
+    } else {
+      Offset* previous = nullptr;
+      for (Offset* i = offsets; i != nullptr; i = i->next) {
+	bool found = false;
+	for (Offset* j = new_offsets; j != nullptr; j = j->next) {
+	  if (i->range.start == j->range.start) {
+	    found = true;
+	    break;
+	  }
+	}
+	if (!found) {
+	  if (previous == nullptr) {
+	    if (offsets != nullptr) {
+	      offsets = offsets->next;
+	    }
+	  } else {
+	    previous->next = previous->next->next;
+	  }
+	} else {
+	  previous = i;
+	}
+      }
+    }
+    i = word_end;
+  }
+
   String  logs       = read_file((char*) index->path.data);
-  String  result     = allocate_bytes(arena, 0, 1);
-  Offset* offset     = lookup(index->root, parameters.query);
+  String  result     = allocate_bytes(query_arena, 0, 1);
+  Offset* offset     = offsets;
   I64     line_count = 0;
   while (offset != nullptr) {
     String line     = suffix(logs, offset->range.start);
@@ -339,10 +396,9 @@ static String query(
     if (time == -1) {
       print(WARN "Failed to parse time as ", log_time_format, " in this line: ", line);
     }
-    assert(contains(line, parameters.query));
     
     if (start_time <= time && time <= end_time) {
-      String query_result = allocate_bytes(arena, line.size, 1);
+      String query_result = allocate_bytes(query_arena, line.size, 1);
       memcpy(query_result.data, line.data, line.size);
       result.size += line.size;
 
@@ -355,6 +411,7 @@ static String query(
   }
 
   close_file(logs);
+  restore(offset_arena, saved);
   return result;
 }
 
@@ -502,7 +559,10 @@ I32 main(I32 argc, char** argv) {
 
 	  String filtered_logs = allocate_bytes(query_arena, 0, 1);
 	  for (Index* i = index; i != nullptr; i = i->next) {
-	    filtered_logs.size += query(query_arena, time_format, i, parameters, bins, histogram).size;
+	    String result = query(
+	      node_arena, query_arena, time_format, i, parameters, bins, histogram
+	    );
+	    filtered_logs.size += result.size;
 	  }
 
 	  I64 content_length = sizeof(bins) + sizeof(histogram) + filtered_logs.size;

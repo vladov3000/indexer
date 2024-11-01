@@ -17,6 +17,18 @@ static A max(A a, A b) {
   return a < b ? a : b;
 }
 
+static U8 to_lower(U8 c) {
+  return 'A' <= c && c <= 'Z' ? (c - 'A' + 'a') : c;
+}
+
+static bool is_hex(U8 c) {
+  return ('0' <= c && c <= '9') || ('a' <= c && c <= 'z');
+}
+
+static U8 from_hex(U8 c) {
+  return '0' <= c && c <= '9' ? (c - '0') : (c - 'a' + 10);
+}
+
 struct String {
   U8* data;
   I64 size;
@@ -98,8 +110,9 @@ static String slice(String base, I64 start, I64 end) {
   return prefix(suffix(base, start), end - start);
 }
 
-static I64 find(String base, char c) {
-  U8* result = (U8*) memchr(base.data, c, base.size);
+static I64 find(String base, char c, I64 start = 0) {
+  start      = min(start, base.size);
+  U8* result = (U8*) memchr(&base.data[start], c, base.size);
   return result == NULL ? base.size : (result - base.data);
 }
 
