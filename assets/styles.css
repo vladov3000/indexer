@@ -42,14 +42,14 @@ textarea::placeholder {
     opacity: 0.5;
 }
 
-button {
+#query button {
     background-color: #f9a31b;
     border: 0.2em outset #ffd541;
     color: #060608;
     font-size: 1.5em;
 }
 
-button:focus {
+#query button:active {
     border-style: inset;
     outline-color: #df3e23;
 }
@@ -70,6 +70,32 @@ svg text {
     border: 0.05em solid var(--border-color);
     border-radius: 0.25em;
     box-shadow: 0 0 0.25em var(--shadow-color);
+}
+
+#header {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    padding-left: 0.5em;
+    padding-right: 0.5em;
+    border-bottom: 0.05em solid var(--border-color);
+}
+
+#header button {
+    background-color: #23674e;
+    border: 0.1em outset #5daf8d;
+    color: var(--text-color);
+    height: 100%;
+}
+
+#pageButtons {
+    display: flex;
+    gap: 1em;
+}
+
+#results button:active {
+    border-style: inset;
+    outline-color: #d6f264;
 }
 
 p {

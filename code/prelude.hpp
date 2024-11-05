@@ -29,6 +29,10 @@ static U8 from_hex(U8 c) {
   return '0' <= c && c <= '9' ? (c - '0') : (c - 'a' + 10);
 }
 
+static U8 is_digit(U8 c) {
+  return '0' <= c && c <= '9';
+}
+
 struct String {
   U8* data;
   I64 size;

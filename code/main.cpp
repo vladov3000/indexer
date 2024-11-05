@@ -74,6 +74,7 @@ struct Parameters {
   String query;
   String start;
   String end;
+  I32    page;
 };
 
 static void parse_parameter(String* input, Parameters* parameters) {
@@ -111,6 +112,17 @@ static void parse_parameter(String* input, Parameters* parameters) {
   }
   if (key == "end") {
     parameters->end = value;
+  }
+  if (key == "page") {
+    I32 page = 0;
+    for (I64 i = 0; i < value.size; i++) {
+      if (!is_digit(value[i])) {
+	page = 0;
+	break;
+      }
+      page = 10 * page + value[i] - '0';
+    }
+    parameters->page = page;
   }
 }
 
@@ -405,30 +417,38 @@ static String query(
       }
     }
 
+    I32 page_size    = 64;
+    I32 min_offset   = page_size * parameters.page;
+    I32 max_offset   = min_offset + page_size;
+    I32 offset_count = 0;
+
     Offset* offset = offsets;
-    while (offset != nullptr) {
-      String line     = suffix(logs, offset->value);
-      I64    line_end = find(line, '\n');
-      line            = prefix(line, line_end + 1);
+    while (offset != nullptr && offset_count < max_offset) {
+      if (offset_count >= min_offset) {
+	String line     = suffix(logs, offset->value);
+	I64    line_end = find(line, '\n');
+	line            = prefix(line, line_end + 1);
 
-      time_t time = -1;
-      for (I64 i = 0; time == -1 && i < line.size; i++) {
-	time = parse_time(suffix(line, i), log_time_format);
-      }
-      if (time == -1) {
-	print(WARN "Failed to parse time as ", log_time_format, " in this line: ", line);
-      }
+	time_t time = -1;
+	for (I64 i = 0; time == -1 && i < line.size; i++) {
+	  time = parse_time(suffix(line, i), log_time_format);
+	}
+	if (time == -1) {
+	  print(WARN "Failed to parse time as ", log_time_format, " in this line: ", line);
+	}
     
-      if (start_time <= time && time <= end_time) {
-	String query_result = allocate_bytes(query_arena, line.size, 1);
-	memcpy(query_result.data, line.data, line.size);
-	result.size += line.size;
+	if (start_time <= time && time <= end_time) {
+	  String query_result = allocate_bytes(query_arena, line.size, 1);
+	  memcpy(query_result.data, line.data, line.size);
+	  result.size += line.size;
 
-	F32 value = (F32) (time - start_time) / (end_time - start_time);
-	histogram[(I32) (bins * value)]++;      
+	  F32 value = (F32) (time - start_time) / (end_time - start_time);
+	  histogram[(I32) (bins * value)]++;      
+	}
       }
 
       offset = offset->next;
+      offset_count++;
     }
   }
   close_file(logs);
@@ -572,6 +592,8 @@ I32 main(I32 argc, char** argv) {
 	String query_prefix = "GET /api/query?";
 
 	if (starts_with(request, query_prefix)) {
+	  I64 saved = save(query_arena);
+	  
 	  String     rest            = suffix(request, query_prefix.size);
 	  String     parameters_line = prefix(rest, find(rest, ' '));
 	  Parameters parameters      = parse_parameters(parameters_line);
@@ -589,7 +611,7 @@ I32 main(I32 argc, char** argv) {
 
 	  I64 content_length = sizeof(bins) + sizeof(histogram) + filtered_logs.size;
 	  U8  storage[20]    = {};
-		
+
 	  struct iovec headers[] = {
 	    to_iovec("HTTP/1.1 200 OK\r\nContent-Length: "),
 	    to_iovec(to_string(content_length, storage)),
@@ -604,7 +626,7 @@ I32 main(I32 argc, char** argv) {
 	    println(ERROR "Failed to write to connection: ", get_error(), '.');
 	  }
 
-	  // query_arena->used = 0;
+	  restore(query_arena, saved);
 	} else {
 	  const char* file_path    = nullptr;
 	  String      content_type = {};
@@ -661,6 +683,11 @@ I32 main(I32 argc, char** argv) {
 	println(WARN "Failed to close socket: ", get_error(), '.');
       }
     }
+
+    for (I64 i = 0; i < length(arenas); i++) {
+      println(INFO "arenas[", i, "].used=", arenas[i].used);
+    }
+    
     flush();
   }
 }

@@ -1,3 +1,5 @@
+let page = 0;
+
 function load() {    
     const queryButton = document.getElementById("queryButton");
     queryButton.addEventListener("click", onQueryClick);
@@ -11,7 +13,7 @@ function load() {
     const endTime = document.getElementById("endTime");
     setDate(endTime, new Date());
 
-    // onQueryClick();
+    onQueryClick();
 }
 
 function setDate(input, date) {
@@ -20,30 +22,57 @@ function setDate(input, date) {
 }
 
 async function onQueryClick() {
+    /*
     const query     = document.getElementById("queryInput").value;
     const startTime = document.getElementById("startTime").value;
     const endTime   = document.getElementById("endTime").value;
-
-    /*
-    const query     = "INFO";
-    const startTime = "2024-10-08T00:00";
-    const endTime   = "2024-10-10T00:00";
     */
 
-    const response  = await fetch(`/api/query?query=${query}&start=${startTime}&end=${endTime}`);
-    const body      = await response.arrayBuffer();
-    const binsView  = new Uint8Array(body, 0, 4);
+    const query     = "INFO";
+    const startTime = "2024-10-09T00:00";
+    const endTime   = "2024-10-11T00:00";
     
-    const bins      = binsView[0] + (binsView[1] << 8) + (binsView[2] << 16) + (binsView[3] << 24);
-    const histogram = new Int32Array(body, 4, bins);
-    const logs      = new TextDecoder().decode(new Uint8Array(body, (bins + 1) * 4));
+    const parameters = `query=${query}&start=${startTime}&end=${endTime}&page=${page}`;
+    const response   = await fetch(`/api/query?${parameters}`);
+    const body       = await response.arrayBuffer();
+    let   offset     = 0;;
+    
+    const bins = new Int32Array(body, offset, 1)[0];
+    offset += 4;
+    
+    const histogram = new Int32Array(body, offset, bins);
+    offset += histogram.byteLength;
+    
+    const logs = new TextDecoder().decode(new Uint8Array(body, offset));
 
     document.body.replaceChildren(document.body.children[0]);
     drawGraph(logs.length == 0 ? null : histogram);
 
     const results = document.createElement("div");
     results.setAttribute("id", "results");
-    document.body.appendChild(results);    
+    document.body.appendChild(results);
+
+    const header = document.createElement("div");
+    header.setAttribute("id", "header");
+    results.appendChild(header);
+
+    const headerTitle       = document.createElement("h3");
+    headerTitle.textContent = "Results";
+    header.appendChild(headerTitle);
+
+    const pageButtons = document.createElement("div");
+    pageButtons.setAttribute("id", "pageButtons");
+    header.appendChild(pageButtons);
+
+    const previousPage       = document.createElement("button");
+    previousPage.textContent = "Previous Page";
+    previousPage.addEventListener("click", () => { page = page == 0 ? 0 : page - 1; onQueryClick(); });
+    pageButtons.appendChild(previousPage);
+
+    const nextPage       = document.createElement("button");
+    nextPage.textContent = "Next Page";
+    nextPage.addEventListener("click", () => { page = page + 1; onQueryClick(); });
+    pageButtons.appendChild(nextPage);
     
     for (let line of logs.split("\n")) {
 	if (line.length > 0) {
@@ -149,5 +178,6 @@ function drawGraph(values) {
 	x += barWidth + padding;
     }
 }
+
 
 window.addEventListener("load", load);
