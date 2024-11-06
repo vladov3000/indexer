@@ -11,7 +11,9 @@
 #include "arena.hpp"
 
 static void insert(Arena* arena, I32 fd, I64 offset, String word, I64 value) {
-  assert(lseek(fd, 0, SEEK_END) != -1);
+  I64 end = lseek(fd, 0, SEEK_END);
+  assert(end != -1);
+  
   assert(write(fd, &word.size, sizeof(I64)) == sizeof(I64));
   assert(write(fd, word.data, word.size) == word.size);
   assert(write(fd, &value, sizeof(I64)) == sizeof(I64));

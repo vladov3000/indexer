@@ -13,7 +13,7 @@ function load() {
     const endTime = document.getElementById("endTime");
     setDate(endTime, new Date());
 
-    onQueryClick();
+    // onQueryClick();
 }
 
 function setDate(input, date) {
@@ -22,15 +22,37 @@ function setDate(input, date) {
 }
 
 async function onQueryClick() {
-    /*
     const query     = document.getElementById("queryInput").value;
     const startTime = document.getElementById("startTime").value;
     const endTime   = document.getElementById("endTime").value;
-    */
 
-    const query     = "INFO";
+    /*
+    const query     = "ASK What happened with request f457dd4c-207b-4db3-8c52-afbfd97e636f?";
     const startTime = "2024-10-09T00:00";
     const endTime   = "2024-10-11T00:00";
+    */
+
+    if (query.startsWith("ASK ")) {
+	document.body.replaceChildren(document.body.children[0]);
+	
+	const thinkingText       = document.createElement("p");
+	thinkingText.textContent = "RUN_QUERY requestId=f457dd4c-207b-4db3-8c52-afbfd97e636f";
+	thinkingText.classList.add("thinking");
+	document.body.appendChild(thinkingText);
+
+	setTimeout(() => {
+	    drawLogs("requestId=f457dd4c-207b-4db3-8c52-afbfd97e636f", `2024/10/21 19:46:53 INFO New signUp request requestId=f457dd4c-207b-4db3-8c52-afbfd97e636f\n2024/10/21 19:46:53 ERROR Failed to insert user with unique username requestId=f457dd4c-207b-4db3-8c52-afbfd97e636f error="ERROR: duplicate key value violates unique constraint \"users_username_key\" (SQLSTATE 23505)"`);
+	}, 1000);
+
+	setTimeout(() => {
+	    const thinkingText2       = document.createElement("p");
+	    thinkingText2.textContent = `Based on the provided log entries, the "signUp" request with requestId "f457dd4c-207b-4db3-8c52-afbfd97e636f" was processed, but there was an error inserting the user into the database due to a duplicate key value violating the unique constraint "users\_username\_key" (SQLSTATE 23505). This means that the username of the user is not unique, and it is already present in the database.`;
+	    thinkingText2.classList.add("thinking");
+	    document.body.appendChild(thinkingText2);
+	}, 2000);
+	
+	return;
+    }
     
     const parameters = `query=${query}&start=${startTime}&end=${endTime}&page=${page}`;
     const response   = await fetch(`/api/query?${parameters}`);
@@ -48,44 +70,11 @@ async function onQueryClick() {
     document.body.replaceChildren(document.body.children[0]);
     drawGraph(logs.length == 0 ? null : histogram);
 
-    const results = document.createElement("div");
-    results.setAttribute("id", "results");
-    document.body.appendChild(results);
-
-    const header = document.createElement("div");
-    header.setAttribute("id", "header");
-    results.appendChild(header);
-
-    const headerTitle       = document.createElement("h3");
-    headerTitle.textContent = "Results";
-    header.appendChild(headerTitle);
-
-    const pageButtons = document.createElement("div");
-    pageButtons.setAttribute("id", "pageButtons");
-    header.appendChild(pageButtons);
-
-    const previousPage       = document.createElement("button");
-    previousPage.textContent = "Previous Page";
-    previousPage.addEventListener("click", () => { page = page == 0 ? 0 : page - 1; onQueryClick(); });
-    pageButtons.appendChild(previousPage);
-
-    const nextPage       = document.createElement("button");
-    nextPage.textContent = "Next Page";
-    nextPage.addEventListener("click", () => { page = page + 1; onQueryClick(); });
-    pageButtons.appendChild(nextPage);
-    
-    for (let line of logs.split("\n")) {
-	if (line.length > 0) {
-	    for (const word of query.split(' ')) {
-		if (word !== "OR") {
-		    line = line.replaceAll(word, `<span class=\"found\">${word}</span>`);
-		}
-	    }
-	    const result     = document.createElement("p");
-	    result.innerHTML = line;
-	    results.appendChild(result);
-	}
+    if (logs.length == 0) {
+	return;
     }
+
+    drawLogs(query, logs);
 }
 
 function drawGraph(values) {
@@ -179,5 +168,45 @@ function drawGraph(values) {
     }
 }
 
+function drawLogs(query, logs) {
+    const results = document.createElement("div");
+    results.setAttribute("id", "results");
+    document.body.appendChild(results);
+
+    const header = document.createElement("div");
+    header.setAttribute("id", "header");
+    results.appendChild(header);
+
+    const headerTitle       = document.createElement("h3");
+    headerTitle.textContent = "Results";
+    header.appendChild(headerTitle);
+
+    const pageButtons = document.createElement("div");
+    pageButtons.setAttribute("id", "pageButtons");
+    header.appendChild(pageButtons);
+
+    const previousPage       = document.createElement("button");
+    previousPage.textContent = "Previous Page";
+    previousPage.addEventListener("click", () => { page = page == 0 ? 0 : page - 1; onQueryClick(); });
+    pageButtons.appendChild(previousPage);
+
+    const nextPage       = document.createElement("button");
+    nextPage.textContent = "Next Page";
+    nextPage.addEventListener("click", () => { page = page + 1; onQueryClick(); });
+    pageButtons.appendChild(nextPage);
+    
+    for (let line of logs.split("\n")) {
+	if (line.length > 0) {
+	    for (const word of query.split(' ')) {
+		if (word !== "OR") {
+		    line = line.replaceAll(word, `<span class=\"found\">${word}</span>`);
+		}
+	    }
+	    const result     = document.createElement("p");
+	    result.innerHTML = line;
+	    results.appendChild(result);
+	}
+    }
+}
 
 window.addEventListener("load", load);
