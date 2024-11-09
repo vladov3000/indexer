@@ -58,8 +58,6 @@ async function onQueryClick() {
     const parameters = `query=${query}&start=${startTime}&end=${endTime}&page=${page}`;
     const response   = await fetch(`/api/query?${parameters}`);
 
-    let noResults = false;
-    
     for await (const chunk of response.body) {
 	const reader = { input: chunk, offset: 0 };
 
@@ -74,7 +72,7 @@ async function onQueryClick() {
 	    } else if (tag === 2) {
 		const bins      = read_int(reader);
 		const histogram = read_ints(reader, bins);
-		drawGraph(noResults ? null : histogram);
+		drawGraph(histogram);
 	    }
 	}
     }
@@ -123,7 +121,15 @@ function drawGraph(values) {
     graph.setAttribute("height", graphHeight);
     container.replaceChildren(graph);
 
-    if (values == null) {
+    let allZero = true;
+    for (const value of values) {
+	if (value > 0) {
+	    allZero = false;
+	    break;
+	}
+    }
+    
+    if (allZero) {
 	const text       = document.createElementNS("http://www.w3.org/2000/svg", "text");
 	text.textContent = "No matches found.";
 	text.setAttribute("text-anchor", "middle");
