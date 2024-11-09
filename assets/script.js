@@ -58,8 +58,6 @@ async function onQueryClick() {
     const parameters = `query=${query}&start=${startTime}&end=${endTime}&page=${page}`;
     const response   = await fetch(`/api/query?${parameters}`);
 
-    document.body.replaceChildren(document.body.children[0], document.body.children[1]);
-
     let noResults = false;
     
     for await (const chunk of response.body) {
@@ -117,11 +115,13 @@ function drawGraph(values) {
     const graphHeight       = 400;
     const graphPadding      = 25;
     const animationDuration = "0.25s";
+
+    const container = document.getElementById("graph");
     
     const graph = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     graph.setAttribute("width", graphWidth);
     graph.setAttribute("height", graphHeight);
-    document.getElementById("graph").appendChild(graph);
+    container.replaceChildren(graph);
 
     if (values == null) {
 	const text       = document.createElementNS("http://www.w3.org/2000/svg", "text");
@@ -204,9 +204,8 @@ function drawGraph(values) {
 }
 
 function drawLogs(query, logs) {
-    const results = document.createElement("div");
-    results.setAttribute("id", "results");
-    document.body.appendChild(results);
+    const results = document.getElementById("results");
+    results.replaceChildren();
 
     const header = document.createElement("div");
     header.setAttribute("id", "header");
