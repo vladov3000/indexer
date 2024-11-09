@@ -69,11 +69,7 @@ async function onQueryClick() {
 
     document.body.replaceChildren(document.body.children[0]);
     drawGraph(logs.length == 0 ? null : histogram);
-
-    if (logs.length == 0) {
-	return;
-    }
-
+    
     drawLogs(query, logs);
 }
 
@@ -190,11 +186,15 @@ function drawLogs(query, logs) {
     previousPage.addEventListener("click", () => { page = page == 0 ? 0 : page - 1; onQueryClick(); });
     pageButtons.appendChild(previousPage);
 
+    const pageText       = document.createElement("span");
+    pageText.textContent = page;
+    pageButtons.appendChild(pageText);
+
     const nextPage       = document.createElement("button");
     nextPage.textContent = "Next Page";
     nextPage.addEventListener("click", () => { page = page + 1; onQueryClick(); });
     pageButtons.appendChild(nextPage);
-    
+
     for (let line of logs.split("\n")) {
 	if (line.length > 0) {
 	    for (const word of query.split(' ')) {
@@ -206,6 +206,12 @@ function drawLogs(query, logs) {
 	    result.innerHTML = line;
 	    results.appendChild(result);
 	}
+    }
+
+    if (logs.length == 0) {
+	const result     = document.createElement("p");
+	result.innerHTML = "No matches found.";
+	results.appendChild(result);	
     }
 }
 

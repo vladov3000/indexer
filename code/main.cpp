@@ -684,9 +684,11 @@ I32 main(I32 argc, char** argv) {
       }
     }
 
+    /* Debug memory usage.
     for (I64 i = 0; i < length(arenas); i++) {
       println(INFO "arenas[", i, "].used=", arenas[i].used);
     }
+    */
     
     flush();
   }
