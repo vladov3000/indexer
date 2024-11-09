@@ -13,7 +13,7 @@ function load() {
     const endTime = document.getElementById("endTime");
     setDate(endTime, new Date());
 
-    // onQueryClick();
+    onQueryClick();
 }
 
 function setDate(input, date) {
@@ -22,15 +22,16 @@ function setDate(input, date) {
 }
 
 async function onQueryClick() {
+    /*
     const query     = document.getElementById("queryInput").value;
     const startTime = document.getElementById("startTime").value;
     const endTime   = document.getElementById("endTime").value;
+    */
 
-    /*
-    const query     = "ASK What happened with request f457dd4c-207b-4db3-8c52-afbfd97e636f?";
+    // const query     = "ASK What happened with request f457dd4c-207b-4db3-8c52-afbfd97e636f?";
+    const query     = "INFO";
     const startTime = "2024-10-09T00:00";
     const endTime   = "2024-10-11T00:00";
-    */
 
     if (query.startsWith("ASK ")) {
 	document.body.replaceChildren(document.body.children[0]);
@@ -53,24 +54,62 @@ async function onQueryClick() {
 	
 	return;
     }
-    
+
     const parameters = `query=${query}&start=${startTime}&end=${endTime}&page=${page}`;
     const response   = await fetch(`/api/query?${parameters}`);
-    const body       = await response.arrayBuffer();
-    let   offset     = 0;;
-    
-    const bins = new Int32Array(body, offset, 1)[0];
-    offset += 4;
-    
-    const histogram = new Int32Array(body, offset, bins);
-    offset += histogram.byteLength;
-    
-    const logs = new TextDecoder().decode(new Uint8Array(body, offset));
 
-    document.body.replaceChildren(document.body.children[0]);
-    drawGraph(logs.length == 0 ? null : histogram);
+    document.body.replaceChildren(document.body.children[0], document.body.children[1]);
+
+    let noResults = false;
     
-    drawLogs(query, logs);
+    for await (const chunk of response.body) {
+	const reader = { input: chunk, offset: 0 };
+
+	while (reader.offset < reader.input.length) {
+	    const tag = read_int(reader);
+
+	    if (tag === 1) {
+		const logs_size = read_int(reader);
+		const logs      = read_string(reader, logs_size);
+		drawLogs(query, logs);
+		noResults       = logs.length == 0;
+	    } else if (tag === 2) {
+		const bins      = read_int(reader);
+		const histogram = read_ints(reader, bins);
+		drawGraph(noResults ? null : histogram);
+	    }
+	}
+    }
+}
+
+function read_int(reader) {
+    const input  = reader.input;
+    const offset = reader.offset;
+    
+    let result = 0;
+    result += input[offset + 3] << 24;
+    result += input[offset + 2] << 16;
+    result += input[offset + 1] <<  8;
+    result += input[offset];
+    
+    reader.offset += 4;
+    return result;
+}
+
+function read_ints(reader, count) {
+    const input    = reader.input;
+    const offset   = reader.offset;
+    const result   = new Int32Array(input.buffer.slice(input.byteOffset), offset, count);
+    reader.offset += 4 * count;
+    return result;
+}
+
+function read_string(reader, size) {
+    const input    = reader.input;
+    const offset   = reader.offset;
+    const result   = new TextDecoder().decode(input.slice(offset, offset + size))
+    reader.offset += size;
+    return result;
 }
 
 function drawGraph(values) {
@@ -82,7 +121,7 @@ function drawGraph(values) {
     const graph = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     graph.setAttribute("width", graphWidth);
     graph.setAttribute("height", graphHeight);
-    document.body.appendChild(graph);
+    document.getElementById("graph").appendChild(graph);
 
     if (values == null) {
 	const text       = document.createElementNS("http://www.w3.org/2000/svg", "text");

@@ -32,6 +32,10 @@ static struct iovec to_iovec(String s) {
   return (struct iovec) { .iov_base = s.data, .iov_len = (U64) s.size };
 }
 
+static struct iovec to_iovec(I32* n) {
+  return (struct iovec) { .iov_base = n, .iov_len = sizeof(I32) };
+}
+
 static void write_response(I32 connection_fd, String response) {
   I64 bytes_written = write(connection_fd, response.data, response.size);
   if (bytes_written == -1) {
@@ -598,27 +602,42 @@ I32 main(I32 argc, char** argv) {
 	  String     parameters_line = prefix(rest, find(rest, ' '));
 	  Parameters parameters      = parse_parameters(parameters_line);
 
+	  I32 logs_tag      = 1;
+	  I32 histogram_tag = 2;
+	  
 	  I32 histogram[100] = {};
 	  I32 bins           = length(histogram);
 
-	  String filtered_logs = allocate_bytes(query_arena, 0, 1);
+	  String logs = allocate_bytes(query_arena, 0, 1);
 	  for (Index* i = index; i != nullptr; i = i->next) {
 	    String result = query(
 	      offset_arena, query_arena, time_format, i, parameters, bins, histogram
 	    );
-	    filtered_logs.size += result.size;
+	    logs.size += result.size;
 	  }
+	  I64 padding   = align(logs.size, 4) - logs.size;
+	  logs.size    += padding;
+	  allocate_bytes(query_arena, padding, 1);
 
-	  I64 content_length = sizeof(bins) + sizeof(histogram) + filtered_logs.size;
+	  I32 logs_size = logs.size;
+
+	  I64 content_length
+	    = sizeof(logs_tag)      + sizeof(logs_size) + logs.size
+	    + sizeof(histogram_tag) + sizeof(bins)      + sizeof(histogram);
 	  U8  storage[20]    = {};
+
+	  println(INFO "logs_size=", (I64) logs_size);
 
 	  struct iovec headers[] = {
 	    to_iovec("HTTP/1.1 200 OK\r\nContent-Length: "),
 	    to_iovec(to_string(content_length, storage)),
 	    to_iovec("\r\nContent-Type: application/octet-stream\r\n\r\n"),
-	    { .iov_base = &bins,     .iov_len = sizeof(bins)      },
+	    to_iovec(&logs_tag),
+	    to_iovec(&logs_size),
+	    to_iovec(logs),
+	    to_iovec(&histogram_tag),
+	    to_iovec(&bins),
 	    { .iov_base = histogram, .iov_len = sizeof(histogram) },
-	    to_iovec(filtered_logs),
 	  };
 
 	  I64 bytes_written = writev(connection_fd, headers, length(headers));
