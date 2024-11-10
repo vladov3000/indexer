@@ -366,22 +366,77 @@ static Query* parse_query(Arena* arena, String query) {
   return root;
 }
 
-static String run_query(
+static void write_histogram(I32 connection_fd, I32 bins, I32* histogram) {
+  I32 histogram_tag = 2;
+
+  I64    chunk_size        = sizeof(histogram_tag) + sizeof(bins) + sizeof(I32) * bins;
+  U8     storage[16]       = {};
+  String chunk_size_string = to_hex_string(chunk_size, storage);
+
+  struct iovec headers[] = {
+    to_iovec(chunk_size_string),
+    to_iovec("\r\n"),
+    to_iovec(&histogram_tag),
+    to_iovec(&bins),
+    { .iov_base = histogram, .iov_len = sizeof(I32) * bins },
+    to_iovec("\r\n"),
+  };
+
+  I64 bytes_written = writev(connection_fd, headers, length(headers));
+  if (bytes_written == -1) {
+    println(ERROR "Failed to write to connection: ", get_error(), '.');
+  }
+}
+
+static void write_logs(Arena* arena, I32 connection_fd, String logs) {
+  I64 saved = save(arena);
+
+  I32 logs_tag = 1;
+	
+  I64 padding = align(logs.size, 4) - logs.size;
+  logs.size  += padding;
+  allocate_bytes(arena, padding, 1);
+
+  I32 logs_size = logs.size;
+	  
+  I64    chunk_size        = sizeof(logs_tag) + sizeof(logs_size) + logs.size;
+  U8     storage[16]       = {};
+  String chunk_size_string = to_hex_string(chunk_size, storage);
+
+  struct iovec headers[] = {
+    to_iovec(chunk_size_string),
+    to_iovec("\r\n"),
+    to_iovec(&logs_tag),
+    to_iovec(&logs_size),
+    to_iovec(logs),
+    to_iovec("\r\n"),
+  };
+
+  I64 bytes_written = writev(connection_fd, headers, length(headers));
+  if (bytes_written == -1) {
+    println(ERROR "Failed to write to connection: ", get_error(), '.');
+  }
+
+  restore(arena, saved);
+}
+
+static void run_query(
   Arena*     query_arena,
   char*      log_time_format,
+  I32        connection_fd,
   Index*     index,
   Parameters parameters,
   Query*     query,
   I32        bins,
-  I32*       histogram
+  I32*       histogram,
+  String*    result
 ) {
   const char* query_time_format = "%Y-%m-%dT%H:%M";
   
   time_t start_time = parse_time(parameters.start, query_time_format);
   time_t end_time   = parse_time(parameters.end, query_time_format);
 
-  String logs   = read_file((char*) index->path.data);
-  String result = allocate_bytes(query_arena, 0, 1);
+  String logs = read_file((char*) index->path.data);
 
   for (Query* or_query = query; or_query != nullptr; or_query = or_query->next) {
     Offset* offsets    = nullptr;
@@ -422,14 +477,17 @@ static String run_query(
     I32 min_offset   = page_size * parameters.page;
     I32 max_offset   = min_offset + page_size;
     I32 offset_count = 0;
+    I32 wrote_logs   = false;
+    
+    I64 last_histogram_write = time(NULL);
 
     Offset* offset = offsets;
-    while (offset != nullptr && offset_count < max_offset) {
-      if (offset_count >= min_offset) {
-	String line     = suffix(logs, offset->value);
-	I64    line_end = find(line, '\n');
-	line            = prefix(line, line_end + 1);
+    while (offset != nullptr) {
+      String line     = suffix(logs, offset->value);
+      I64    line_end = find(line, '\n');
+      line            = prefix(line, line_end + 1);
 
+      {
 	time_t time = -1;
 	for (I64 i = 0; time == -1 && i < line.size; i++) {
 	  time = parse_time(suffix(line, i), log_time_format);
@@ -439,21 +497,39 @@ static String run_query(
 	}
     
 	if (start_time <= time && time <= end_time) {
-	  String query_result = allocate_bytes(query_arena, line.size, 1);
-	  memcpy(query_result.data, line.data, line.size);
-	  result.size += line.size;
+	  if (min_offset <= offset_count && offset_count < max_offset) {
+	    String query_result = allocate_bytes(query_arena, line.size, 1);
+	    memcpy(query_result.data, line.data, line.size);
+	    result->size += line.size;
+	  }
 
 	  F32 value = (F32) (time - start_time) / (end_time - start_time);
-	  histogram[(I32) (bins * value)]++;      
+	  histogram[(I32) (bins * value)]++;
 	}
       }
-
+      
       offset = offset->next;
       offset_count++;
+      
+      if (offset_count == max_offset) {
+	write_logs(query_arena, connection_fd, *result);
+	wrote_logs = true;
+      }
+
+      I64 now = time(NULL);
+      if (now != last_histogram_write) {
+	write_histogram(connection_fd, bins, histogram);
+	last_histogram_write = now;
+      }
+    }
+
+    if (offset_count > 0 && !wrote_logs) {
+      write_logs(query_arena, connection_fd, *result);
     }
   }
+
+  write_histogram(connection_fd, bins, histogram);
   close_file(logs);
-  return result;
 }
 
 I32 main(I32 argc, char** argv) {
@@ -598,54 +674,28 @@ I32 main(I32 argc, char** argv) {
 	  String     parameters_line = prefix(rest, find(rest, ' '));
 	  Parameters parameters      = parse_parameters(parameters_line);
 	  Query*     query           = parse_query(query_arena, parameters.query);
-	  
-	  I32 logs_tag      = 1;
-	  I32 histogram_tag = 2;
+
+	  String header =
+	    "HTTP/1.1 200 OK\r\n"
+	    "Transfer-Encoding: chunked\r\n"
+	    "Content-Type: application/octet-stream\r\n"
+	    "\r\n";
+
+	  I64 bytes_written = write(connection_fd, header.data, header.size);
+	  if (bytes_written == -1) {
+	    println(ERROR "Failed to write to connection: ", get_error(), '.');
+	  }
 	  
 	  I32 histogram[100] = {};
 	  I32 bins           = length(histogram);
 	  
 	  String logs = allocate_bytes(query_arena, 0, 1);
 	  for (Index* i = index; i != nullptr; i = i->next) {
-	    String result = run_query(
-	      query_arena, time_format, i, parameters, query, bins, histogram
-	    );
-	    logs.size += result.size;
+	    run_query(query_arena, time_format, connection_fd, i, parameters, query, bins, histogram, &logs);
 	  }
-	  I64 padding   = align(logs.size, 4) - logs.size;
-	  logs.size    += padding;
-	  allocate_bytes(query_arena, padding, 1);
 
-	  I32 logs_size = logs.size;
-
-	  I64 content_length
-	    = sizeof(logs_tag)      + sizeof(logs_size) + logs.size
-	    + sizeof(histogram_tag) + sizeof(bins)      + sizeof(histogram);
-	  
-	  U8     storage[20]           = "000000000000000\r\n";
-	  String content_length_string = to_hex_string(content_length, storage);
-
-	  println(INFO "content_length=", content_length_string, " decimal=", content_length);
-
-	  struct iovec headers[] = {
-	    to_iovec(
-	      "HTTP/1.1 200 OK\r\n"
-	      "Transfer-Encoding: chunked\r\n"
-	      "Content-Type: application/octet-stream\r\n"
-	      "\r\n"
-	    ),
-	    to_iovec(content_length_string),
-	    to_iovec("\r\n"),
-	    to_iovec(&logs_tag),
-	    to_iovec(&logs_size),
-	    to_iovec(logs),
-	    to_iovec(&histogram_tag),
-	    to_iovec(&bins),
-	    { .iov_base = histogram, .iov_len = sizeof(histogram) },
-	    to_iovec("\r\n0\r\n\r\n"),
-	  };
-
-	  I64 bytes_written = writev(connection_fd, headers, length(headers));
+	  String trailer = "0\r\n\r\n";
+	  bytes_written  = write(connection_fd, trailer.data, trailer.size);
 	  if (bytes_written == -1) {
 	    println(ERROR "Failed to write to connection: ", get_error(), '.');
 	  }

@@ -106,7 +106,7 @@ static String to_hex_string(I64 n, U8 storage[16]) {
     n        = n >> 4;
     
     start    = start - 1;
-    *start   = digit + (digit <= 9 ? '0' : 'A');
+    *start   = digit + (digit <= 9 ? '0' : ('A' - 10));
   } while (n > 0);
   return String(start, end - start);
 }

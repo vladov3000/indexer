@@ -63,6 +63,7 @@ async function onQueryClick() {
 
 	while (reader.offset < reader.input.length) {
 	    const tag = read_int(reader);
+	    console.log(tag);
 
 	    if (tag === 1) {
 		const logs_size = read_int(reader);
@@ -181,9 +182,12 @@ function drawGraph(values) {
 	if (value > 0) {
 	    const bar = document.createElementNS("http://www.w3.org/2000/svg", "rect");
 	    bar.setAttribute("x", x);
+	    bar.setAttribute("y", graphHeight - graphPadding - barHeight);
 	    bar.setAttribute("width", barWidth);
+	    bar.setAttribute("height", barHeight);
 	    bar.setAttribute("fill", "#f9a31b");
 
+	    /*
 	    const splines = "0 0.5 0 0.5; 0 0.5 0 0.5";
 
 	    const yAnimation = document.createElementNS("http://www.w3.org/2000/svg", "animate");
@@ -202,6 +206,7 @@ function drawGraph(values) {
 
 	    bar.appendChild(yAnimation);
 	    bar.appendChild(heightAnimation);
+	    */
 	    graph.appendChild(bar);
 	}
 
