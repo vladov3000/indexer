@@ -621,31 +621,34 @@ I32 main(I32 argc, char** argv) {
 	  I64 content_length
 	    = sizeof(logs_tag)      + sizeof(logs_size) + logs.size
 	    + sizeof(histogram_tag) + sizeof(bins)      + sizeof(histogram);
-	  U8  storage[20]    = {};
+	  
+	  U8     storage[20]           = "000000000000000\r\n";
+	  String content_length_string = to_hex_string(content_length, storage);
 
-	  println(INFO "logs_size=", (I64) logs_size);
+	  println(INFO "content_length=", content_length_string, " decimal=", content_length);
 
 	  struct iovec headers[] = {
-	    to_iovec("HTTP/1.1 200 OK\r\nContent-Length: "),
-	    to_iovec(to_string(content_length, storage)),
-	    to_iovec("\r\nContent-Type: application/octet-stream\r\n\r\n"),
+	    to_iovec(
+	      "HTTP/1.1 200 OK\r\n"
+	      "Transfer-Encoding: chunked\r\n"
+	      "Content-Type: application/octet-stream\r\n"
+	      "\r\n"
+	    ),
+	    to_iovec(content_length_string),
+	    to_iovec("\r\n"),
 	    to_iovec(&logs_tag),
 	    to_iovec(&logs_size),
 	    to_iovec(logs),
 	    to_iovec(&histogram_tag),
 	    to_iovec(&bins),
 	    { .iov_base = histogram, .iov_len = sizeof(histogram) },
+	    to_iovec("\r\n0\r\n\r\n"),
 	  };
 
-	  I64 bytes_written = writev(connection_fd, headers, length(headers) - 3);
+	  I64 bytes_written = writev(connection_fd, headers, length(headers));
 	  if (bytes_written == -1) {
 	    println(ERROR "Failed to write to connection: ", get_error(), '.');
 	  }
-
-	  bytes_written = writev(connection_fd, &headers[length(headers) - 3], 3);
-	  if (bytes_written == -1) {
-	    println(ERROR "Failed to write to connection: ", get_error(), '.');
-	  }	  
 
 	  restore(query_arena, saved);
 	} else {
@@ -705,9 +708,11 @@ I32 main(I32 argc, char** argv) {
       }
     }
 
+    /* Print memory usage.
     for (I64 i = 0; i < length(arenas); i++) {
       println(INFO "arenas[", i, "].used=", arenas[i].used);
     }
+    */
     
     flush();
   }

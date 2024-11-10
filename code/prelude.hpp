@@ -98,6 +98,19 @@ static String to_string(I64 n, U8 storage[20]) {
   return String(start, end - start);
 }
 
+static String to_hex_string(I64 n, U8 storage[16]) {
+  U8* end   = &storage[16];
+  U8* start = end;
+  do {
+    U8 digit = n & 0xF;
+    n        = n >> 4;
+    
+    start    = start - 1;
+    *start   = digit + (digit <= 9 ? '0' : 'A');
+  } while (n > 0);
+  return String(start, end - start);
+}
+
 static String suffix(String base, I64 start) {
   start      = min(start, base.size);
   base.data += start;
