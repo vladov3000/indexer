@@ -366,12 +366,12 @@ static Query* parse_query(Arena* arena, String query) {
   return root;
 }
 
-static String query(
-  Arena*     offset_arena,
+static String run_query(
   Arena*     query_arena,
   char*      log_time_format,
   Index*     index,
   Parameters parameters,
+  Query*     query,
   I32        bins,
   I32*       histogram
 ) {
@@ -380,9 +380,6 @@ static String query(
   time_t start_time = parse_time(parameters.start, query_time_format);
   time_t end_time   = parse_time(parameters.end, query_time_format);
 
-  I64 saved = save(offset_arena);
-
-  Query* query  = parse_query(offset_arena, parameters.query);
   String logs   = read_file((char*) index->path.data);
   String result = allocate_bytes(query_arena, 0, 1);
 
@@ -456,7 +453,6 @@ static String query(
     }
   }
   close_file(logs);
-  restore(offset_arena, saved);
   return result;
 }
 
@@ -601,17 +597,18 @@ I32 main(I32 argc, char** argv) {
 	  String     rest            = suffix(request, query_prefix.size);
 	  String     parameters_line = prefix(rest, find(rest, ' '));
 	  Parameters parameters      = parse_parameters(parameters_line);
-
+	  Query*     query           = parse_query(query_arena, parameters.query);
+	  
 	  I32 logs_tag      = 1;
 	  I32 histogram_tag = 2;
 	  
 	  I32 histogram[100] = {};
 	  I32 bins           = length(histogram);
-
+	  
 	  String logs = allocate_bytes(query_arena, 0, 1);
 	  for (Index* i = index; i != nullptr; i = i->next) {
-	    String result = query(
-	      offset_arena, query_arena, time_format, i, parameters, bins, histogram
+	    String result = run_query(
+	      query_arena, time_format, i, parameters, query, bins, histogram
 	    );
 	    logs.size += result.size;
 	  }
@@ -640,10 +637,15 @@ I32 main(I32 argc, char** argv) {
 	    { .iov_base = histogram, .iov_len = sizeof(histogram) },
 	  };
 
-	  I64 bytes_written = writev(connection_fd, headers, length(headers));
+	  I64 bytes_written = writev(connection_fd, headers, length(headers) - 3);
 	  if (bytes_written == -1) {
 	    println(ERROR "Failed to write to connection: ", get_error(), '.');
 	  }
+
+	  bytes_written = writev(connection_fd, &headers[length(headers) - 3], 3);
+	  if (bytes_written == -1) {
+	    println(ERROR "Failed to write to connection: ", get_error(), '.');
+	  }	  
 
 	  restore(query_arena, saved);
 	} else {
@@ -703,11 +705,9 @@ I32 main(I32 argc, char** argv) {
       }
     }
 
-    /* Debug memory usage.
     for (I64 i = 0; i < length(arenas); i++) {
       println(INFO "arenas[", i, "].used=", arenas[i].used);
     }
-    */
     
     flush();
   }
