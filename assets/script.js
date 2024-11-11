@@ -1,11 +1,21 @@
 let page = 0;
 
-function load() {    
+function load() {
+    const results            = document.getElementById("mainResults");
+    results.style.visibility = "hidden";
+    results.addEventListener("keydown", e => {
+	if (e.key === "q") {
+	    const queryInput = document.getElementById("queryInput");
+	    queryInput.value = "requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc";
+	    setTimeout(() => queryInput.focus(), 0);
+	}
+    });
+    
     const queryButton = document.getElementById("queryButton");
     queryButton.addEventListener("click", onQueryClick);
 
     const yesterday = new Date();
-    yesterday.setTime(yesterday.getTime() - 6 * 60 * 60 * 1000)
+    yesterday.setTime(yesterday.getTime() - 31 * 24 * 60 * 60 * 1000)
     
     const startTime = document.getElementById("startTime");
     setDate(startTime, yesterday);
@@ -13,7 +23,7 @@ function load() {
     const endTime = document.getElementById("endTime");
     setDate(endTime, new Date());
 
-    onQueryClick();
+    // onQueryClick();
 }
 
 function setDate(input, date) {
@@ -22,35 +32,41 @@ function setDate(input, date) {
 }
 
 async function onQueryClick() {
-    /*
     const query     = document.getElementById("queryInput").value;
     const startTime = document.getElementById("startTime").value;
     const endTime   = document.getElementById("endTime").value;
-    */
 
     // const query     = "ASK What happened with request f457dd4c-207b-4db3-8c52-afbfd97e636f?";
+    
+    /*
     const query     = "INFO";
     const startTime = "2024-10-09T00:00";
     const endTime   = "2024-10-11T00:00";
+    */
 
     if (query.startsWith("ASK ")) {
-	document.body.replaceChildren(document.body.children[0]);
+	const thinking = document.getElementById("thinking");
+	thinking.replaceChildren();
 	
 	const thinkingText       = document.createElement("p");
-	thinkingText.textContent = "RUN_QUERY requestId=f457dd4c-207b-4db3-8c52-afbfd97e636f";
-	thinkingText.classList.add("thinking");
-	document.body.appendChild(thinkingText);
+	thinkingText.textContent = "RUN_QUERY requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc";
+	thinkingText.classList.add("thoughtBubble");
+	thinking.appendChild(thinkingText);
 
 	setTimeout(() => {
-	    drawLogs("requestId=f457dd4c-207b-4db3-8c52-afbfd97e636f", `2024/10/21 19:46:53 INFO New signUp request requestId=f457dd4c-207b-4db3-8c52-afbfd97e636f\n2024/10/21 19:46:53 ERROR Failed to insert user with unique username requestId=f457dd4c-207b-4db3-8c52-afbfd97e636f error="ERROR: duplicate key value violates unique constraint \"users_username_key\" (SQLSTATE 23505)"`);
-	}, 1000);
+	    const results = document.createElement("div");
+	    results.classList.add("results");
+	    thinking.appendChild(results);
+	    
+	    drawLogs("requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc", `2024/10/21 19:46:50 ERROR Failed to insert user with unique username requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc error="ERROR: duplicate key value violates unique constraint \"users_username_key\" (SQLSTATE 23505)"`, results);
+	}, 500);
 
 	setTimeout(() => {
 	    const thinkingText2       = document.createElement("p");
 	    thinkingText2.textContent = `Based on the provided log entries, the "signUp" request with requestId "f457dd4c-207b-4db3-8c52-afbfd97e636f" was processed, but there was an error inserting the user into the database due to a duplicate key value violating the unique constraint "users\_username\_key" (SQLSTATE 23505). This means that the username of the user is not unique, and it is already present in the database.`;
-	    thinkingText2.classList.add("thinking");
-	    document.body.appendChild(thinkingText2);
-	}, 2000);
+	    thinkingText2.classList.add("thoughtBubble");
+	    thinking.appendChild(thinkingText2);
+	}, 1000);
 	
 	return;
     }
@@ -63,13 +79,18 @@ async function onQueryClick() {
 
 	while (reader.offset < reader.input.length) {
 	    const tag = read_int(reader);
-	    console.log(tag);
 
 	    if (tag === 1) {
 		const logs_size = read_int(reader);
 		const logs      = read_string(reader, logs_size);
-		drawLogs(query, logs);
 		noResults       = logs.length == 0;
+		
+		const results            = document.getElementById("mainResults");
+		results.style.visibility = "visible";
+		results.replaceChildren();
+
+		drawLogs(query, logs, results);
+
 	    } else if (tag === 2) {
 		const bins      = read_int(reader);
 		const histogram = read_ints(reader, bins);
@@ -214,10 +235,7 @@ function drawGraph(values) {
     }
 }
 
-function drawLogs(query, logs) {
-    const results = document.getElementById("results");
-    results.replaceChildren();
-
+function drawLogs(query, logs, results) {
     const header = document.createElement("div");
     header.setAttribute("id", "header");
     results.appendChild(header);

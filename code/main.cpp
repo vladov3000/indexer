@@ -512,6 +512,7 @@ static void run_query(
       offset_count++;
       
       if (offset_count == max_offset) {
+	write_histogram(connection_fd, bins, histogram);
 	write_logs(query_arena, connection_fd, *result);
 	wrote_logs = true;
       }

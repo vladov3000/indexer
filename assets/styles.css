@@ -65,7 +65,7 @@ svg text {
     fill: var(--text-color);
 }
 
-#results {
+.results {
     background-color: var(--background-color);
     border: 0.05em solid var(--border-color);
     border-radius: 0.25em;
@@ -95,18 +95,26 @@ svg text {
     gap: 1em;
 }
 
-#results button:active {
+.results button:active {
     border-style: inset;
     outline-color: #d6f264;
 }
 
-.thinking {
+#thinking {
+    display: flex;
+    flex-direction: column;
+    gap: 1em;
+    width: 100%;
+}
+
+.thoughtBubble {
     position: relative;
-    background-color: var(--background-color);
-    border: 0.05em solid var(--border-color);
+    background-color: #3b1725;
+    border: 0.05em solid #fa6a0a;
     border-radius: 0.25em;
-    box-shadow: 0 0 0.25em var(--shadow-color);
+    box-shadow: 0 0 0.25em #f9a31b;
     margin-left: 1em;
+    align-self: flex-start;
 }
 
 p {
