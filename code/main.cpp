@@ -732,9 +732,10 @@ I32 main(I32 argc, char** argv) {
 	  
 	    struct stat info = {};
 	    assert(fstat(file_fd, &info) != -1);
+	    I64 file_size    = info.st_size;
 
 	    U8     storage[20]    = {};
-	    String content_length = to_string(info.st_size, storage);
+	    String content_length = to_string(file_size, storage);
 	  
 	    struct iovec headers[] = {
 	      to_iovec("HTTP/1.1 200 OK\r\nContent-Length: "),
@@ -743,7 +744,8 @@ I32 main(I32 argc, char** argv) {
 	      to_iovec(content_type),
 	      to_iovec("\r\n\r\n")
 	    };
-	
+
+#ifdef __APPLE__
 	    struct sf_hdtr hdtr = {};
 	    hdtr.headers        = headers;
 	    hdtr.hdr_cnt        = length(headers);
@@ -753,6 +755,19 @@ I32 main(I32 argc, char** argv) {
 	    if (send_result == -1) {
 	      println(ERROR "Failed to send file: ", get_error(), '.');
 	    }
+#endif
+	    
+#ifdef __linux__
+	    I64 bytes_written = writev(connection_fd, headers, length(headers));
+	    if (bytes_written == -1) {
+	      println(ERROR "Failed to write headers: ", get_error(), '.');
+	    }
+
+	    I64 bytes_written = sendfile(connection_fd, file_fd, 0, file_size);
+	    if (bytes_written == -1) {
+	      println(ERROR "Failed to send file: ", get_error(), '.');
+	    }
+#endif
 
 	    assert(close(file_fd) == 0);
 	  }
