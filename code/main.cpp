@@ -12,6 +12,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifdef __linux__
+#include <sys/sendfile.h>
+#endif
+
 #include "prelude.hpp"
 #include "print.hpp"
 #include "arena.hpp"
