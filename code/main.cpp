@@ -763,7 +763,7 @@ I32 main(I32 argc, char** argv) {
 	      println(ERROR "Failed to write headers: ", get_error(), '.');
 	    }
 
-	    I64 bytes_written = sendfile(connection_fd, file_fd, 0, file_size);
+	    bytes_written = sendfile(connection_fd, file_fd, 0, file_size);
 	    if (bytes_written == -1) {
 	      println(ERROR "Failed to send file: ", get_error(), '.');
 	    }
