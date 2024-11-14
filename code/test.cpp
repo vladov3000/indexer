@@ -10,13 +10,28 @@
 #include "print.hpp"
 #include "arena.hpp"
 
+static void write_int(I32 fd, I64 n) {
+  assert(write(fd, &n, sizeof(I64)) == sizeof(I64));
+}
+
+static void write_string(I32 fd, String s) {
+  assert(write(fd, s.data, s.size) == s.size);
+}
+
 static void insert(Arena* arena, I32 fd, I64 offset, String word, I64 value) {
   I64 end = lseek(fd, 0, SEEK_END);
   assert(end != -1);
   
-  assert(write(fd, &word.size, sizeof(I64)) == sizeof(I64));
-  assert(write(fd, word.data, word.size) == word.size);
-  assert(write(fd, &value, sizeof(I64)) == sizeof(I64));
+  write_int(fd, word.size);
+  write_string(fd, word);
+  write_int(fd, value);
+  write_int(fd, 0);
+}
+
+static I64 read_int(I32 fd) {
+  I64 n = 0;
+  assert(read(fd, &n, sizeof(I64)) == sizeof(I64));
+  return n;
 }
 
 static bool lookup(Arena* arena, I32 fd, I64 offset, String target, I64* value_out) {
@@ -38,8 +53,8 @@ static bool lookup(Arena* arena, I32 fd, I64 offset, String target, I64* value_o
     String word = allocate_bytes(arena, word_size, 1);
     assert(read(fd, word.data, word.size) == word.size);
 
-    I64 value = 0;
-    assert(read(fd, &value, sizeof(I64)) == sizeof(I64));
+    I64 value  = read_int(fd);
+    I64 offset = read_int(fd);
 
     if (word == target) {
       found      = true;
@@ -62,13 +77,17 @@ I32 main() {
   assert(fd != -1);
   assert(unlink(index_path) == 0);
 
-  char   storage[] = "Hello000";
+  char   storage[] = "Hello0000000";
   String word      = storage;
   
   for (I64 i = 0; i < 999; i++) {
-    word[word.size - 1] = (i / 1   % 10) + '0';
-    word[word.size - 2] = (i / 10  % 10) + '0';
-    word[word.size - 3] = (i / 100 % 10) + '0';
+    I64 suffix = i;
+    I64 end    = word.size;
+    while (end > 0) {
+      end       = end - 1;
+      word[end] = suffix % 10 + '0';
+      suffix    = suffix / 10;
+    }
     
     insert(&arena, fd, 0, word, i);
 
