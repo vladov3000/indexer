@@ -39,7 +39,7 @@ I32 main() {
     arenas[i] = make_arena(1ll << 32);
   }
 
-  I32 raw_fd = open("examples/slog", O_RDONLY);
+  I32 raw_fd = open("examples/edgar-scraper/edgar-scraper-2024-10-10T00-22-19.198.log", O_RDONLY);
   assert(raw_fd != -1);
 
   I32 words_fd     = open("build/words", O_RDWR | O_CREAT | O_TRUNC, 0777);
@@ -56,15 +56,15 @@ I32 main() {
 
   I64    already_read = 0;
   String raw          = allocate_bytes(&arenas[0], 512, 1);
-
-  println((I64) MAX_ARITY);
   
   while (1) {
     I64 saved = save(&arenas[0]);
     
-    I64 bytes_read = read(raw_fd, &raw.data[already_read], raw.size);
+    I64 bytes_read = read(raw_fd, &raw.data[already_read], raw.size - already_read);
     assert(bytes_read != -1);
+    
     bytes_read += already_read;
+    
     if (bytes_read == 0) {
       break;
     }
