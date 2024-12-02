@@ -1,6 +1,24 @@
+const apiKey = "INSERT_HERE";
+
+// Base off of: https://github.com/groq/groq-api-cookbook/blob/main/tutorials/function-calling-sql/json-mode-function-calling-for-sql.ipynb
+const systemPrompt = `
+You are Groq Advisor, and you are tasked with answering a user's questions about their application logs.
+
+You can search application logs by prefixing a keyword with RUN_SEARCH.
+
+The resulting logs will start with SEARCH_RESULT.
+
+Respond with only a search you want to preform or your final answer.
+
+Question:
+--------
+{user_question}
+--------
+`;
+
 let page = 0;
 
-function load() {
+async function load() {
     const results            = document.getElementById("mainResults");
     results.style.visibility = "hidden";
     results.addEventListener("keydown", e => {
@@ -49,30 +67,62 @@ async function onQueryClick() {
     */
 
     if (query.startsWith("ASK ")) {
-	const thinking = document.getElementById("thinking");
-	thinking.replaceChildren();
-	
-	const thinkingText       = document.createElement("p");
-	thinkingText.textContent = "RUN_QUERY requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc";
-	thinkingText.classList.add("thoughtBubble");
-	thinking.appendChild(thinkingText);
+        let question = query.slice("ASK ".length);
 
-	setTimeout(() => {
-	    const results = document.createElement("div");
-	    results.classList.add("results");
-	    thinking.appendChild(results);
-	    
-	    drawLogs("requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc", `2024/10/21 19:46:50 ERROR Failed to insert user with unique username requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc error="ERROR: duplicate key value violates unique constraint \"users_username_key\" (SQLSTATE 23505)"`, results);
-	}, 500);
+	    const thinking = document.getElementById("thinking");
+	    thinking.replaceChildren();
 
-	setTimeout(() => {
-	    const thinkingText2       = document.createElement("p");
-	    thinkingText2.textContent = `Based on the provided log entries, the "signUp" request with requestId "f457dd4c-207b-4db3-8c52-afbfd97e636f" was processed, but there was an error inserting the user into the database due to a duplicate key value violating the unique constraint "users\_username\_key" (SQLSTATE 23505). This means that the username of the user is not unique, and it is already present in the database.`;
-	    thinkingText2.classList.add("thoughtBubble");
-	    thinking.appendChild(thinkingText2);
-	}, 1000);
+        for (let i = 0; i < 3; i++) {
+            const message = await ask(question);
+            // const message = "RUN_SEARCH requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc";
+
+            const thinkingText       = document.createElement("p");
+            thinkingText.textContent = message;
+            thinkingText.classList.add("thoughtBubble");
+            thinking.appendChild(thinkingText);
+
+            if (message.startsWith("RUN_SEARCH ")) {
+                const newQuery = message.slice("RUN_SEARCH ".length);
+                const logs = await getLogs(newQuery, startTime, endTime);
+
+                const results = document.createElement("div");
+                results.classList.add("results");
+                thinking.append(results);
+
+                drawLogs(newQuery, logs, results);
+
+                question += '\n' + message;
+                question += '\n' + "SEARCH_RESULT" + logs;
+            } else {
+                break;
+            }
+        }
+
+        return;
 	
-	return;
+        /*
+        const thinkingText       = document.createElement("p");
+        thinkingText.textContent = "RUN_QUERY requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc";
+        thinkingText.classList.add("thoughtBubble");
+        thinking.appendChild(thinkingText);
+
+        setTimeout(() => {
+            const results = document.createElement("div");
+            results.classList.add("results");
+            thinking.appendChild(results);
+            
+            drawLogs("requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc", `2024/10/21 19:46:50 ERROR Failed to insert user with unique username requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc error="ERROR: duplicate key value violates unique constraint \"users_username_key\" (SQLSTATE 23505)"`, results);
+        }, 500);
+
+        setTimeout(() => {
+            const thinkingText2       = document.createElement("p");
+            thinkingText2.textContent = `Based on the provided log entries, the "signUp" request with requestId "f457dd4c-207b-4db3-8c52-afbfd97e636f" was processed, but there was an error inserting the user into the database due to a duplicate key value violating the unique constraint "users\_username\_key" (SQLSTATE 23505). This means that the username of the user is not unique, and it is already present in the database.`;
+            thinkingText2.classList.add("thoughtBubble");
+            thinking.appendChild(thinkingText2);
+        }, 1000);
+        
+        return;
+        */
     }
 
     const parameters = `query=${query}&start=${startTime}&end=${endTime}&page=${page}`;
@@ -101,6 +151,43 @@ async function onQueryClick() {
 		drawGraph(histogram);
 	    }
 	}
+    }
+}
+
+async function ask(question) {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+            "model": "llama3-8b-8192",
+            "messages": [
+                {"role": "system", "content": systemPrompt },
+                {"role": "user", "content": question },
+            ],
+            "temperature": 0.7
+        }),
+    });
+
+    const responseJson = await response.json();
+    return responseJson.choices[0].message.content;
+}
+
+async function getLogs(query, startTime, endTime) {
+    const parameters = `query=${query}&start=${startTime}&end=${endTime}&page=${page}`;
+    const response   = await fetch(`api/query?${parameters}`);
+
+    for await (const chunk of response.body) {
+        const reader = { input: chunk, offset: 0 };
+
+        const tag = read_int(reader);
+        if (tag === 1) {
+            const logs_size = read_int(reader);
+		    const logs      = read_string(reader, logs_size);
+            return logs;
+        }
     }
 }
 
