@@ -15,7 +15,7 @@ function load() {
     queryButton.addEventListener("click", onQueryClick);
 
     const yesterday = new Date();
-    yesterday.setTime(yesterday.getTime() - 31 * 24 * 60 * 60 * 1000)
+    yesterday.setTime(yesterday.getTime() - 62 * 24 * 60 * 60 * 1000)
     
     const startTime = document.getElementById("startTime");
     setDate(startTime, yesterday);
@@ -72,7 +72,7 @@ async function onQueryClick() {
     }
 
     const parameters = `query=${query}&start=${startTime}&end=${endTime}&page=${page}`;
-    const response   = await fetch(`/api/query?${parameters}`);
+    const response   = await fetch(`api/query?${parameters}`);
 
     for await (const chunk of response.body) {
 	const reader = { input: chunk, offset: 0 };

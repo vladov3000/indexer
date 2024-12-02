@@ -542,7 +542,7 @@ I32 main(I32 argc, char** argv) {
 
   Arena arenas[3] = {};
   for (I64 i = 0; i < length(arenas); i++) {
-    arenas[i] = make_arena(1ll << 34);
+    arenas[i] = make_arena(1ll << 28);
   }
 
   Arena* index_arena  = &arenas[0];
