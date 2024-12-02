@@ -6,7 +6,11 @@ function load() {
     results.addEventListener("keydown", e => {
 	if (e.key === "q") {
 	    const queryInput = document.getElementById("queryInput");
-	    queryInput.value = "requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc";
+	    queryInput.value = window.getSelection().toString();
+
+	    // We need to delay this to the next run of the event loop,
+	    // because otherwise "mainResults" will be focused instead of
+	    // "queryInput".
 	    setTimeout(() => queryInput.focus(), 0);
 	}
     });
