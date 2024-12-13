@@ -178,15 +178,20 @@ async function ask(question) {
 async function getLogs(query, startTime, endTime) {
     const parameters = `query=${query}&start=${startTime}&end=${endTime}&page=${page}`;
     const response   = await fetch(`api/query?${parameters}`);
+    const body       = response.body.getReader();
 
-    for await (const chunk of response.body) {
+    while (true) {
+	const { done, value: chunk } = await body.read();
+	if (done) {
+	    break;
+	}
+	
         const reader = { input: chunk, offset: 0 };
-
-        const tag = read_int(reader);
+        const tag    = read_int(reader);
         if (tag === 1) {
-            const logs_size = read_int(reader);
-		    const logs      = read_string(reader, logs_size);
-            return logs;
+	    const logs_size = read_int(reader);
+	    const logs      = read_string(reader, logs_size);
+	    return logs;
         }
     }
 }
