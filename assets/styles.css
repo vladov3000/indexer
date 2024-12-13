@@ -50,6 +50,7 @@ textarea::placeholder {
 }
 
 #query button:active {
+    outline: none;
     border-style: inset;
     outline-color: #df3e23;
 }
@@ -151,8 +152,7 @@ input[type=datetime-local] {
     height: 100%;
 }
 
-input:focus {
-    border-color: #d6f264;
-    outline: none;
+*:focus {
+    outline-color: #d6f264;
 }
 
