@@ -1,4 +1,4 @@
-const apiKey = "INSERT_HERE";
+import { apiKey } from "/api_key.js";
 
 // Base off of: https://github.com/groq/groq-api-cookbook/blob/main/tutorials/function-calling-sql/json-mode-function-calling-for-sql.ipynb
 const systemPrompt = `
@@ -194,6 +194,8 @@ async function getLogs(query, startTime, endTime) {
 	    return logs;
         }
     }
+    
+    return "";
 }
 
 function read_int(reader) {

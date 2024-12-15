@@ -718,6 +718,9 @@ I32 main(I32 argc, char** argv) {
 	  } else if (starts_with(request, "GET /script.js ")) {
 	    file_path    = "assets/script.js";
 	    content_type = "text/javascript";
+	  } else if (starts_with(request, "GET /api_key.js ")) {
+	    file_path    = "assets/api_key.js";
+	    content_type = "text/javascript";
 	  } else if (starts_with(request, "GET /favicon.ico ")) {
 	    file_path    = "assets/favicon.ico";
 	    content_type = "image/ico";
