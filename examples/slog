@@ -1,5 +1,5 @@
 2024/10/21 19:46:41 INFO Listening port=8080
-2024/10/21 19:46:49 INFO New signUp request requestId=6961230c-bc7c-4636-a88f-f1f42a9a631d
+2024/10/21 19:46:49 INFO New signIn request requestId=6961230c-bc7c-4636-a88f-f1f42a9a631d
 2024/10/21 19:46:49 ERROR Password mismatch requestId=6961230c-bc7c-4636-a88f-f1f42a9a631d error="crypto/bcrypt: hashedPassword is not the hash of the given password"
 2024/10/21 19:46:50 INFO New signUp request requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc
 2024/10/21 19:46:50 ERROR Failed to insert user with unique username requestId=cfc3a428-9bc3-42b4-878f-cf9aa5ab95cc error="ERROR: duplicate key value violates unique constraint \"users_username_key\" (SQLSTATE 23505)"
